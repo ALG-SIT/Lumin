@@ -15,6 +15,12 @@ struct LuminApp: App {
                 .environmentObject(gemmaService)
                 .preferredColorScheme(.light)
                 .task {
+                    peerService.onSessionReceived = { session in
+                        model.receiveSession(session)
+                    }
+                    peerService.onSessionEnded = { sessionID in
+                        model.endReceivedSession(id: sessionID)
+                    }
                     peerService.onQuizReceived = { quiz in
                         model.activeQuiz = quiz
                     }

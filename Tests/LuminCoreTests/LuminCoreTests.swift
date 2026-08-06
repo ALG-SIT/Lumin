@@ -64,4 +64,60 @@ final class LuminCoreTests: XCTestCase {
         guard case .quiz(let received) = decoded else { return XCTFail("Expected quiz") }
         XCTAssertEqual(received, quiz)
     }
+
+    func testSessionAndAcknowledgmentRoundTrip() throws {
+        let session = LearningSession(quiz: SampleData.englishGrammar)
+        let messages: [PeerMessage] = [
+            .session(session),
+            .sessionEnded(session.id),
+            .acknowledgment(UUID())
+        ]
+
+        for message in messages {
+            let data = try JSONEncoder().encode(message)
+            _ = try JSONDecoder().decode(PeerMessage.self, from: data)
+        }
+    }
+
+    func testAnalysisEventCarriesSessionBoundaryWithoutRawAnswer() throws {
+        let sessionID = UUID()
+        let event = AnalysisEvent(
+            participantToken: "P-TEST",
+            sessionID: sessionID,
+            questionID: "q-1",
+            concept: "一次関数",
+            misconception: "傾きと切片の混同",
+            correct: false,
+            hintCount: 2,
+            retrySuccess: true
+        )
+        let data = try JSONEncoder().encode(event)
+        let json = try XCTUnwrap(String(data: data, encoding: .utf8))
+        let decoded = try JSONDecoder().decode(AnalysisEvent.self, from: data)
+
+        XCTAssertEqual(decoded.sessionID, sessionID)
+        XCTAssertFalse(json.contains("answer"))
+    }
+
+    func testSessionArchiveRoundTrip() throws {
+        let session = LearningSession(quiz: SampleData.linearFunctions)
+        let event = AnalysisEvent(
+            participantToken: "P-TEST",
+            sessionID: session.id,
+            questionID: session.quiz.questions[0].id,
+            concept: session.quiz.questions[0].concept,
+            misconception: nil,
+            correct: true,
+            hintCount: 0,
+            retrySuccess: false
+        )
+        let archive = SessionArchive(session: session, events: [event], adoptedPlan: nil)
+        let decoded = try JSONDecoder().decode(
+            SessionArchive.self,
+            from: JSONEncoder().encode(archive)
+        )
+
+        XCTAssertEqual(decoded.session.id, session.id)
+        XCTAssertEqual(decoded.events, [event])
+    }
 }

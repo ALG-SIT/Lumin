@@ -87,7 +87,7 @@ struct LessonPlanEditorView: View {
 
                 HStack(spacing: 14) {
                     Button("この案を採用") {
-                        model.adoptedPlan = draft
+                        model.adoptPlan(draft)
                         showSaved = true
                     }
                     .buttonStyle(PrimaryButtonStyle())

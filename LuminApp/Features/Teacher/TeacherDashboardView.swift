@@ -9,6 +9,7 @@ struct TeacherDashboardView: View {
         case overview = "理解の現在地"
         case lesson = "次の10分"
         case session = "小テスト配信"
+        case history = "授業履歴"
 
         var id: String { rawValue }
         var icon: String {
@@ -16,6 +17,7 @@ struct TeacherDashboardView: View {
             case .overview: "chart.bar.xaxis"
             case .lesson: "sparkles.rectangle.stack"
             case .session: "dot.radiowaves.left.and.right"
+            case .history: "clock.arrow.circlepath"
             }
         }
     }
@@ -67,11 +69,16 @@ struct TeacherDashboardView: View {
                 case .overview: TeacherOverviewView()
                 case .lesson: LessonPlanEditorView()
                 case .session: SessionControlView()
+                case .history: SessionHistoryView()
                 }
             }
             .toolbar {
                 ToolbarItem(placement: .automatic) {
                     Button("役割を選び直す", systemImage: "rectangle.portrait.and.arrow.right") {
+                        if let sessionID = model.activeSession?.id {
+                            peerService.sendSessionEnded(sessionID)
+                            model.endSession(archive: true)
+                        }
                         peerService.stop()
                         model.role = nil
                     }
@@ -81,7 +88,7 @@ struct TeacherDashboardView: View {
         .onAppear { peerService.startHosting() }
         .onChange(of: peerService.connectedPeers) { _, peers in
             if model.sessionIsLive && !peers.isEmpty {
-                peerService.sendQuiz(model.activeQuiz)
+                if let session = model.activeSession { peerService.sendSession(session) }
             }
         }
     }
@@ -300,7 +307,21 @@ private struct SessionControlView: View {
                                     .foregroundStyle(LuminTheme.muted)
                             }
                             Spacer()
-                            StatusPill(title: peerService.statusText, systemImage: "antenna.radiowaves.left.and.right")
+                            VStack(alignment: .trailing, spacing: 7) {
+                                StatusPill(title: peerService.statusText, systemImage: "antenna.radiowaves.left.and.right")
+                                if !peerService.joinCode.isEmpty {
+                                    HStack(spacing: 7) {
+                                        Text("参加コード")
+                                            .font(.caption)
+                                            .foregroundStyle(LuminTheme.muted)
+                                        Text(peerService.joinCode)
+                                            .font(.title3.bold().monospacedDigit())
+                                            .textSelection(.enabled)
+                                    }
+                                    .accessibilityElement(children: .combine)
+                                    .accessibilityLabel("参加コード \(peerService.joinCode)")
+                                }
+                            }
                         }
 
                         Divider()
@@ -323,8 +344,13 @@ private struct SessionControlView: View {
                         }
 
                         Button(model.sessionIsLive ? "配信を終了" : "この小テストを配信") {
-                            model.sessionIsLive.toggle()
-                            if model.sessionIsLive { peerService.sendQuiz(model.activeQuiz) }
+                            if let session = model.activeSession {
+                                peerService.sendSessionEnded(session.id)
+                                model.endSession(archive: true)
+                            } else {
+                                let session = model.startSession()
+                                peerService.sendSession(session)
+                            }
                         }
                         .buttonStyle(PrimaryButtonStyle())
                     }
@@ -351,5 +377,116 @@ private struct SessionControlView: View {
         }
         .background(LuminTheme.canvas)
         .navigationTitle("小テスト配信")
+    }
+}
+
+private struct SessionHistoryView: View {
+    @EnvironmentObject private var model: AppModel
+    @State private var pendingDeletion: SessionArchive?
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("授業履歴")
+                        .font(.system(size: 30, weight: .bold, design: .rounded))
+                    Text("保存するのは匿名の分析結果と採用した授業案だけです。最新100授業を端末内に保持します。")
+                        .foregroundStyle(LuminTheme.muted)
+                }
+
+                if let error = model.persistenceError {
+                    Label(error, systemImage: "exclamationmark.triangle.fill")
+                        .font(.subheadline)
+                        .foregroundStyle(LuminTheme.coral)
+                }
+
+                if model.history.isEmpty {
+                    LuminCard {
+                        ContentUnavailableView(
+                            "履歴はまだありません",
+                            systemImage: "clock.arrow.circlepath",
+                            description: Text("小テストの配信を終了すると、匿名集計がこの端末に保存されます。")
+                        )
+                    }
+                } else {
+                    ForEach(model.history) { archive in
+                        historyCard(archive)
+                    }
+                }
+            }
+            .padding(28)
+            .frame(maxWidth: 1000)
+            .frame(maxWidth: .infinity, alignment: .top)
+        }
+        .background(LuminTheme.canvas)
+        .navigationTitle("授業履歴")
+        .confirmationDialog(
+            "この授業履歴を削除しますか？",
+            isPresented: Binding(
+                get: { pendingDeletion != nil },
+                set: { if !$0 { pendingDeletion = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("端末から削除", role: .destructive) {
+                if let id = pendingDeletion?.id { model.deleteArchive(id: id) }
+                pendingDeletion = nil
+            }
+            Button("キャンセル", role: .cancel) { pendingDeletion = nil }
+        } message: {
+            Text("この操作は取り消せません。生徒の解答本文は元から保存されていません。")
+        }
+    }
+
+    private func historyCard(_ archive: SessionArchive) -> some View {
+        let summary = ClassAnalytics.summarize(archive.events)
+        return LuminCard {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(archive.session.quiz.subject)
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(LuminTheme.teal)
+                        Text(archive.session.quiz.title)
+                            .font(.title3.bold())
+                        Text(archive.endedAt.formatted(date: .abbreviated, time: .shortened))
+                            .font(.caption)
+                            .foregroundStyle(LuminTheme.muted)
+                    }
+                    Spacer()
+                    Button("削除", systemImage: "trash", role: .destructive) {
+                        pendingDeletion = archive
+                    }
+                    .labelStyle(.iconOnly)
+                    .foregroundStyle(LuminTheme.coral)
+                }
+
+                Divider()
+                HStack(spacing: 24) {
+                    historyMetric("\(summary.participantCount)", "参加端末")
+                    historyMetric("\(summary.responseCount)", "回答")
+                    historyMetric(summary.correctRate.formatted(.percent.precision(.fractionLength(0))), "初回正答率")
+                    historyMetric(summary.retrySuccessRate.formatted(.percent.precision(.fractionLength(0))), "再挑戦成功")
+                }
+
+                if let top = summary.misconceptions.first {
+                    Label("最多のつまずき：\(top.name)（\(top.count)件）", systemImage: "lightbulb.max.fill")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(LuminTheme.ink)
+                }
+                if let plan = archive.adoptedPlan {
+                    Label("採用した案：\(plan.focus)", systemImage: "checkmark.seal.fill")
+                        .font(.subheadline)
+                        .foregroundStyle(LuminTheme.teal)
+                }
+            }
+        }
+    }
+
+    private func historyMetric(_ value: String, _ label: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(value).font(.title3.bold()).monospacedDigit()
+            Text(label).font(.caption).foregroundStyle(LuminTheme.muted)
+        }
     }
 }

@@ -6,6 +6,7 @@ struct StudentQuizView: View {
     @EnvironmentObject private var gemma: GemmaService
 
     let quiz: Quiz
+    let sharesResults: Bool
     let onFinish: () -> Void
 
     @State private var questionIndex = 0
@@ -163,7 +164,9 @@ struct StudentQuizView: View {
                 .foregroundStyle(LuminTheme.amber)
             Text("おつかれさまでした")
                 .font(.system(size: 34, weight: .bold, design: .rounded))
-            Text("考え直した過程も、学びの大切な一部です。\n先生には匿名の分析結果だけが共有されました。")
+            Text(sharesResults
+                ? "考え直した過程も、学びの大切な一部です。\n先生には匿名の分析結果だけが共有されました。"
+                : "考え直した過程も、学びの大切な一部です。\n今回はデモのため、結果は共有されていません。")
                 .multilineTextAlignment(.center)
                 .foregroundStyle(LuminTheme.muted)
             Button("参加画面へ戻る", action: onFinish)
@@ -223,6 +226,7 @@ struct StudentQuizView: View {
     private func finishQuestion(retrySuccess: Bool) {
         let event = AnalysisEvent(
             participantToken: model.participantToken,
+            sessionID: model.activeSession?.id,
             questionID: question.id,
             concept: question.concept,
             misconception: firstMisconception,
@@ -230,7 +234,7 @@ struct StudentQuizView: View {
             hintCount: hintCount,
             retrySuccess: retrySuccess
         )
-        peerService.sendAnalysis(event)
+        if sharesResults { peerService.sendAnalysis(event) }
 
         if questionIndex == quiz.questions.count - 1 {
             isComplete = true
