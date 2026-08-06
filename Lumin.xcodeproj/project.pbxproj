@@ -1,0 +1,398 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		AA0000000000000000001001 /* LuminApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000002001 /* LuminApp.swift */; };
+		AA0000000000000000001002 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000002002 /* AppModel.swift */; };
+		AA0000000000000000001003 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000002003 /* RootView.swift */; };
+		AA0000000000000000001004 /* LuminTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000002004 /* LuminTheme.swift */; };
+		AA0000000000000000001005 /* StudentHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000002005 /* StudentHomeView.swift */; };
+		AA0000000000000000001006 /* StudentQuizView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000002006 /* StudentQuizView.swift */; };
+		AA0000000000000000001007 /* TeacherDashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000002007 /* TeacherDashboardView.swift */; };
+		AA0000000000000000001008 /* LessonPlanEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000002008 /* LessonPlanEditorView.swift */; };
+		AA0000000000000000001009 /* LocalPeerService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000002009 /* LocalPeerService.swift */; };
+		AA0000000000000000001010 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000002010 /* Models.swift */; };
+		AA0000000000000000001011 /* LocalLearningEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000002011 /* LocalLearningEngine.swift */; };
+		AA0000000000000000001012 /* SampleData.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000002012 /* SampleData.swift */; };
+		AA0000000000000000001013 /* GemmaService.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000002014 /* GemmaService.swift */; };
+		AA0000000000000000001014 /* GemmaStatusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000002015 /* GemmaStatusView.swift */; };
+		AA0000000000000000001015 /* Models in Resources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000002016 /* Models */; };
+		AA0000000000000000001016 /* LiteRTLM in Frameworks */ = {isa = PBXBuildFile; productRef = AA0000000000000000008001 /* LiteRTLM */; };
+		AA0000000000000000001017 /* AIModelCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000002017 /* AIModelCatalog.swift */; };
+		AA0000000000000000001018 /* ModelDownloadClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000002018 /* ModelDownloadClient.swift */; };
+		AA0000000000000000001019 /* AppleFoundationAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000002019 /* AppleFoundationAdapter.swift */; };
+		AA0000000000000000001020 /* QuestionBank.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000002020 /* QuestionBank.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		AA0000000000000000002000 /* Lumin.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Lumin.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA0000000000000000002001 /* LuminApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LuminApp.swift; sourceTree = "<group>"; };
+		AA0000000000000000002002 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
+		AA0000000000000000002003 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		AA0000000000000000002004 /* LuminTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = LuminTheme.swift; path = Design/LuminTheme.swift; sourceTree = "<group>"; };
+		AA0000000000000000002005 /* StudentHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = StudentHomeView.swift; path = Features/Student/StudentHomeView.swift; sourceTree = "<group>"; };
+		AA0000000000000000002006 /* StudentQuizView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = StudentQuizView.swift; path = Features/Student/StudentQuizView.swift; sourceTree = "<group>"; };
+		AA0000000000000000002007 /* TeacherDashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = TeacherDashboardView.swift; path = Features/Teacher/TeacherDashboardView.swift; sourceTree = "<group>"; };
+		AA0000000000000000002008 /* LessonPlanEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = LessonPlanEditorView.swift; path = Features/Teacher/LessonPlanEditorView.swift; sourceTree = "<group>"; };
+		AA0000000000000000002009 /* LocalPeerService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = LocalPeerService.swift; path = Services/LocalPeerService.swift; sourceTree = "<group>"; };
+		AA0000000000000000002010 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = Models.swift; path = Sources/LuminCore/Models.swift; sourceTree = SOURCE_ROOT; };
+		AA0000000000000000002011 /* LocalLearningEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = LocalLearningEngine.swift; path = Sources/LuminCore/LocalLearningEngine.swift; sourceTree = SOURCE_ROOT; };
+		AA0000000000000000002012 /* SampleData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SampleData.swift; path = Sources/LuminCore/SampleData.swift; sourceTree = SOURCE_ROOT; };
+		AA0000000000000000002013 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		AA0000000000000000002014 /* GemmaService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = GemmaService.swift; path = AI/GemmaService.swift; sourceTree = "<group>"; };
+		AA0000000000000000002015 /* GemmaStatusView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = GemmaStatusView.swift; path = AI/GemmaStatusView.swift; sourceTree = "<group>"; };
+		AA0000000000000000002016 /* Models */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Models; sourceTree = "<group>"; };
+		AA0000000000000000002017 /* AIModelCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AIModelCatalog.swift; path = AI/AIModelCatalog.swift; sourceTree = "<group>"; };
+		AA0000000000000000002018 /* ModelDownloadClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ModelDownloadClient.swift; path = AI/ModelDownloadClient.swift; sourceTree = "<group>"; };
+		AA0000000000000000002019 /* AppleFoundationAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppleFoundationAdapter.swift; path = AI/AppleFoundationAdapter.swift; sourceTree = "<group>"; };
+		AA0000000000000000002020 /* QuestionBank.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = QuestionBank.swift; path = Sources/LuminCore/QuestionBank.swift; sourceTree = SOURCE_ROOT; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		AA0000000000000000003001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA0000000000000000001016 /* LiteRTLM in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		AA0000000000000000004000 = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000004001 /* LuminApp */,
+				AA0000000000000000004002 /* LuminCore */,
+				AA0000000000000000004003 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		AA0000000000000000004001 /* LuminApp */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000002001 /* LuminApp.swift */,
+				AA0000000000000000002002 /* AppModel.swift */,
+				AA0000000000000000002003 /* RootView.swift */,
+				AA0000000000000000002004 /* LuminTheme.swift */,
+				AA0000000000000000002005 /* StudentHomeView.swift */,
+				AA0000000000000000002006 /* StudentQuizView.swift */,
+				AA0000000000000000002007 /* TeacherDashboardView.swift */,
+				AA0000000000000000002008 /* LessonPlanEditorView.swift */,
+				AA0000000000000000002009 /* LocalPeerService.swift */,
+				AA0000000000000000002014 /* GemmaService.swift */,
+				AA0000000000000000002015 /* GemmaStatusView.swift */,
+				AA0000000000000000002017 /* AIModelCatalog.swift */,
+				AA0000000000000000002018 /* ModelDownloadClient.swift */,
+				AA0000000000000000002019 /* AppleFoundationAdapter.swift */,
+				AA0000000000000000002016 /* Models */,
+				AA0000000000000000002013 /* Info.plist */,
+			);
+			path = LuminApp;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000004002 /* LuminCore */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000002010 /* Models.swift */,
+				AA0000000000000000002011 /* LocalLearningEngine.swift */,
+				AA0000000000000000002012 /* SampleData.swift */,
+				AA0000000000000000002020 /* QuestionBank.swift */,
+			);
+			name = LuminCore;
+			sourceTree = "<group>";
+		};
+		AA0000000000000000004003 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				AA0000000000000000002000 /* Lumin.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		AA0000000000000000000100 /* Lumin */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AA0000000000000000006001 /* Build configuration list for PBXNativeTarget "Lumin" */;
+			buildPhases = (
+				AA0000000000000000003000 /* Sources */,
+				AA0000000000000000003001 /* Frameworks */,
+				AA0000000000000000003002 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Lumin;
+			packageProductDependencies = (
+				AA0000000000000000008001 /* LiteRTLM */,
+			);
+			productName = Lumin;
+			productReference = AA0000000000000000002000 /* Lumin.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		AA0000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2630;
+				LastUpgradeCheck = 2700;
+				TargetAttributes = {
+					AA0000000000000000000100 = {
+						CreatedOnToolsVersion = 26.3;
+					};
+				};
+			};
+			buildConfigurationList = AA0000000000000000006000 /* Build configuration list for PBXProject "Lumin" */;
+			developmentRegion = ja;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				ja,
+				Base,
+			);
+			mainGroup = AA0000000000000000004000;
+			packageReferences = (
+				AA0000000000000000007001 /* XCLocalSwiftPackageReference "Vendor/LiteRTLM" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = AA0000000000000000004003 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				AA0000000000000000000100 /* Lumin */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		AA0000000000000000003002 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA0000000000000000001015 /* Models in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		AA0000000000000000003000 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA0000000000000000001001 /* LuminApp.swift in Sources */,
+				AA0000000000000000001002 /* AppModel.swift in Sources */,
+				AA0000000000000000001003 /* RootView.swift in Sources */,
+				AA0000000000000000001004 /* LuminTheme.swift in Sources */,
+				AA0000000000000000001005 /* StudentHomeView.swift in Sources */,
+				AA0000000000000000001006 /* StudentQuizView.swift in Sources */,
+				AA0000000000000000001007 /* TeacherDashboardView.swift in Sources */,
+				AA0000000000000000001008 /* LessonPlanEditorView.swift in Sources */,
+				AA0000000000000000001009 /* LocalPeerService.swift in Sources */,
+				AA0000000000000000001010 /* Models.swift in Sources */,
+				AA0000000000000000001011 /* LocalLearningEngine.swift in Sources */,
+				AA0000000000000000001012 /* SampleData.swift in Sources */,
+				AA0000000000000000001013 /* GemmaService.swift in Sources */,
+				AA0000000000000000001014 /* GemmaStatusView.swift in Sources */,
+				AA0000000000000000001017 /* AIModelCatalog.swift in Sources */,
+				AA0000000000000000001018 /* ModelDownloadClient.swift in Sources */,
+				AA0000000000000000001019 /* AppleFoundationAdapter.swift in Sources */,
+				AA0000000000000000001020 /* QuestionBank.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		AA0000000000000000005000 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				DEAD_CODE_STRIPPING = YES;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		AA0000000000000000005001 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				DEAD_CODE_STRIPPING = YES;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		AA0000000000000000005002 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = 9JX85U4Z59;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = LuminApp/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = jp.lumin.learning;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		AA0000000000000000005003 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = 9JX85U4Z59;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = LuminApp/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = jp.lumin.learning;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		AA0000000000000000006000 /* Build configuration list for PBXProject "Lumin" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA0000000000000000005000 /* Debug */,
+				AA0000000000000000005001 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AA0000000000000000006001 /* Build configuration list for PBXNativeTarget "Lumin" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AA0000000000000000005002 /* Debug */,
+				AA0000000000000000005003 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		AA0000000000000000007001 /* XCLocalSwiftPackageReference "Vendor/LiteRTLM" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Vendor/LiteRTLM;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		AA0000000000000000008001 /* LiteRTLM */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AA0000000000000000007001 /* XCLocalSwiftPackageReference "Vendor/LiteRTLM" */;
+			productName = LiteRTLM;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = AA0000000000000000000001 /* Project object */;
+}
