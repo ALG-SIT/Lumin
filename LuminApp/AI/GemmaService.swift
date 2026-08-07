@@ -11,6 +11,16 @@ struct GemmaGuidance: Sendable {
     let hint: String
 }
 
+struct TeacherChatTurn: Sendable {
+    enum Role: Sendable, Equatable {
+        case teacher
+        case assistant
+    }
+
+    let role: Role
+    let text: String
+}
+
 @MainActor
 final class GemmaService: ObservableObject {
     enum State: Equatable {
@@ -304,6 +314,73 @@ final class GemmaService: ObservableObject {
         }
     }
 
+    func answerTeacherQuestion(
+        _ question: String,
+        summary: ClassSummary,
+        quiz: Quiz,
+        priorTurns: [TeacherChatTurn] = []
+    ) async throws -> String {
+        let misconceptions = summary.misconceptions.prefix(5)
+            .map { "\($0.name): \($0.count)件（\(Int($0.share * 100))%）" }
+            .joined(separator: "、")
+        let history = priorTurns.suffix(6).map { turn in
+            let speaker = turn.role == .teacher ? "先生" : "AI"
+            return "\(speaker): \(String(turn.text.prefix(500)))"
+        }.joined(separator: "\n")
+        let prompt = """
+        以下の匿名集計と教材情報だけを根拠に、先生の質問へ日本語で簡潔かつ実践的に答えてください。
+        集計にない個人の状態は推測せず、データが不足する場合はその旨を明示してください。
+
+        教科: \(quiz.subject)
+        教材: \(quiz.title)
+        単元: \(quiz.topic ?? quiz.title)
+        出題概念: \(quiz.questions.map(\.concept).joined(separator: "、"))
+        参加端末: \(summary.participantCount)
+        回答数: \(summary.responseCount)
+        初回正答率: \(Int(summary.correctRate * 100))%
+        ヒント後の再挑戦成功率: \(Int(summary.retrySuccessRate * 100))%
+        1回答あたり平均ヒント数: \(summary.averageHints.formatted(.number.precision(.fractionLength(1))))
+        主なつまずき: \(misconceptions.isEmpty ? "回答データなし" : misconceptions)
+
+        直近の対話:
+        \(history.isEmpty ? "なし" : history)
+
+        先生の質問: \(String(question.prefix(1000)))
+        回答は必要に応じて箇条書きを使い、300文字程度までにしてください。
+        """
+
+        state = .generating
+        let started = Date()
+        defer { lastLatency = Date().timeIntervalSince(started) }
+        do {
+            let answer: String
+            switch activeBackend {
+            case .appleFoundation:
+                answer = try await teacherChatWithApple(prompt: prompt)
+            case .gemma:
+                answer = try await teacherChatWithGemma(prompt: prompt)
+            case nil:
+                throw GemmaSetupError.modelNotReady
+            }
+            restoreReadyState()
+            let cleaned = answer.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !cleaned.isEmpty else { throw GemmaSetupError.invalidResponse }
+            return cleaned
+        } catch {
+            if selectedProvider == .automatic, activeBackend == .appleFoundation,
+               await switchToInstalledGemmaFallback() {
+                return try await answerTeacherQuestion(
+                    question,
+                    summary: summary,
+                    quiz: quiz,
+                    priorTurns: priorTurns
+                )
+            }
+            restoreReadyState()
+            throw error
+        }
+    }
+
     private func activateSelection() async {
         switch selectedProvider {
         case .automatic:
@@ -426,6 +503,17 @@ final class GemmaService: ObservableObject {
         return try decodeJSON(LessonPlan.self, from: response.toString)
     }
 
+    private func teacherChatWithGemma(prompt: String) async throws -> String {
+        guard let engine else { throw GemmaSetupError.modelNotReady }
+        let sampler = try SamplerConfig(topK: 30, topP: 0.9, temperature: 0.4)
+        let conversation = try await engine.createConversation(with: ConversationConfig(
+            samplerConfig: sampler,
+            automaticToolCalling: false
+        ))
+        let response = try await conversation.sendMessage(Message(prompt), maxOutputTokens: 420)
+        return response.toString
+    }
+
     private func analyzeWithApple(
         prompt: String,
         candidatePairs: [(code: String, label: String)],
@@ -461,6 +549,19 @@ final class GemmaService: ObservableObject {
                 checkQuestion: response.content.checkQuestion,
                 teacherNote: response.content.teacherNote
             )
+        }
+#endif
+        throw GemmaSetupError.appleFoundationUnavailable
+    }
+
+    private func teacherChatWithApple(prompt: String) async throws -> String {
+#if canImport(FoundationModels)
+        if #available(iOS 26.0, *) {
+            let session = LanguageModelSession(instructions: """
+            あなたは中学校の先生を支援する教育アシスタントです。匿名のクラス集計と教材情報だけを根拠にし、個人を推測せず、授業で実行できる提案を返します。
+            """)
+            let response = try await session.respond(to: prompt)
+            return response.content
         }
 #endif
         throw GemmaSetupError.appleFoundationUnavailable

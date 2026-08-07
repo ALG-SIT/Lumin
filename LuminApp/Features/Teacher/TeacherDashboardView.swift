@@ -3,11 +3,12 @@ import SwiftUI
 struct TeacherDashboardView: View {
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var peerService: LocalPeerService
-    @State private var selection: Section = .overview
+    @State private var selection: Section? = .overview
 
-    private enum Section: String, CaseIterable, Identifiable {
+    private enum Section: String, CaseIterable, Identifiable, Hashable {
         case overview = "理解の現在地"
         case lesson = "次の10分"
+        case assistant = "AIと対話"
         case session = "小テスト配信"
         case history = "授業履歴"
 
@@ -16,6 +17,7 @@ struct TeacherDashboardView: View {
             switch self {
             case .overview: "chart.bar.xaxis"
             case .lesson: "sparkles.rectangle.stack"
+            case .assistant: "bubble.left.and.sparkles"
             case .session: "dot.radiowaves.left.and.right"
             case .history: "clock.arrow.circlepath"
             }
@@ -24,63 +26,13 @@ struct TeacherDashboardView: View {
 
     var body: some View {
         NavigationSplitView {
-            VStack(alignment: .leading, spacing: 22) {
-                HStack(spacing: 10) {
-                    Image(systemName: "sun.max.fill")
-                        .foregroundStyle(LuminTheme.amber)
-                    Text("LUMIN")
-                        .font(.headline.weight(.black))
-                        .tracking(1.5)
-                }
-                .padding(.horizontal, 10)
-
-                List {
-                    ForEach(Section.allCases) { section in
-                        Button {
-                            selection = section
-                        } label: {
-                            Label(section.rawValue, systemImage: section.icon)
-                                .foregroundStyle(selection == section ? LuminTheme.teal : LuminTheme.ink)
-                        }
-                        .buttonStyle(.plain)
-                        .listRowBackground(selection == section ? LuminTheme.tealSoft : Color.clear)
-                    }
-                }
-                .scrollContentBackground(.hidden)
-                .listStyle(.sidebar)
-
-                VStack(alignment: .leading, spacing: 8) {
-                    StatusPill(
-                        title: peerService.statusText,
-                        systemImage: "antenna.radiowaves.left.and.right"
-                    )
-                    Text("生徒の解答本文は受信しません")
-                        .font(.caption2)
-                        .foregroundStyle(LuminTheme.muted)
-                }
-                .padding(10)
-            }
-            .padding(.vertical, 18)
-            .background(LuminTheme.canvas)
-            .navigationSplitViewColumnWidth(min: 220, ideal: 250)
+            sidebar
         } detail: {
-            Group {
-                switch selection {
-                case .overview: TeacherOverviewView()
-                case .lesson: LessonPlanEditorView()
-                case .session: SessionControlView()
-                case .history: SessionHistoryView()
-                }
-            }
+            selectedView
             .toolbar {
                 ToolbarItem(placement: .automatic) {
                     Button("役割を選び直す", systemImage: "rectangle.portrait.and.arrow.right") {
-                        if let sessionID = model.activeSession?.id {
-                            peerService.sendSessionEnded(sessionID)
-                            model.endSession(archive: true)
-                        }
-                        peerService.stop()
-                        model.role = nil
+                        leaveTeacherMode()
                     }
                 }
             }
@@ -90,6 +42,274 @@ struct TeacherDashboardView: View {
             if model.sessionIsLive && !peers.isEmpty {
                 if let session = model.activeSession { peerService.sendSession(session) }
             }
+        }
+    }
+
+    private var sidebar: some View {
+        VStack(alignment: .leading, spacing: 22) {
+            HStack(spacing: 10) {
+                Image(systemName: "sun.max.fill")
+                    .foregroundStyle(LuminTheme.amber)
+                Text("LUMIN")
+                    .font(.headline.weight(.black))
+                    .tracking(1.5)
+            }
+            .padding(.horizontal, 10)
+
+            List(selection: $selection) {
+                ForEach(Section.allCases) { section in
+                    NavigationLink(value: section) {
+                        Label(section.rawValue, systemImage: section.icon)
+                            .foregroundStyle(selection == section ? LuminTheme.teal : LuminTheme.ink)
+                    }
+                    .listRowBackground(selection == section ? LuminTheme.tealSoft : Color.clear)
+                }
+            }
+            .scrollContentBackground(.hidden)
+            .listStyle(.sidebar)
+
+            VStack(alignment: .leading, spacing: 8) {
+                StatusPill(
+                    title: peerService.statusText,
+                    systemImage: "antenna.radiowaves.left.and.right"
+                )
+                Text("生徒の解答本文は受信しません")
+                    .font(.caption2)
+                    .foregroundStyle(LuminTheme.muted)
+            }
+            .padding(10)
+        }
+        .padding(.vertical, 18)
+        .background(LuminTheme.canvas)
+        .navigationSplitViewColumnWidth(min: 220, ideal: 250)
+    }
+
+    @ViewBuilder
+    private var selectedView: some View {
+        switch selection {
+        case .overview, nil: TeacherOverviewView()
+        case .lesson: LessonPlanEditorView()
+        case .assistant: TeacherAIChatView()
+        case .session: SessionControlView()
+        case .history: SessionHistoryView()
+        }
+    }
+
+    private func leaveTeacherMode() {
+        if let sessionID = model.activeSession?.id {
+            peerService.sendSessionEnded(sessionID)
+            model.endSession(archive: true)
+        }
+        peerService.stop()
+        model.role = nil
+    }
+}
+
+private struct TeacherAIChatView: View {
+    private struct ChatMessage: Identifiable {
+        enum Author: Equatable { case teacher, assistant }
+
+        let id = UUID()
+        let author: Author
+        let text: String
+    }
+
+    @EnvironmentObject private var model: AppModel
+    @EnvironmentObject private var gemma: GemmaService
+    @State private var messages: [ChatMessage] = []
+    @State private var draft = ""
+    @State private var isSending = false
+    @State private var errorMessage: String?
+    @FocusState private var isInputFocused: Bool
+
+    private let suggestions = [
+        "今いちばん優先して扱うべきつまずきは？",
+        "次の声かけを3つ提案して",
+        "理解を確かめる問いを作って"
+    ]
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header
+            Divider()
+
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(spacing: 14) {
+                        if messages.isEmpty { welcome }
+                        ForEach(messages) { message in
+                            messageBubble(message)
+                                .id(message.id)
+                        }
+                        if isSending {
+                            HStack(spacing: 8) {
+                                ProgressView()
+                                Text("学習状況を整理しています…")
+                                    .foregroundStyle(LuminTheme.muted)
+                                Spacer()
+                            }
+                            .padding(.horizontal, 4)
+                        }
+                    }
+                    .padding(20)
+                }
+                .onChange(of: messages.count) { _, _ in
+                    if let id = messages.last?.id {
+                        withAnimation { proxy.scrollTo(id, anchor: .bottom) }
+                    }
+                }
+            }
+
+            Divider()
+            composer
+        }
+        .background(LuminTheme.canvas)
+        .navigationTitle("AIと対話")
+        .alert("AIに質問できませんでした", isPresented: Binding(
+            get: { errorMessage != nil },
+            set: { if !$0 { errorMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(errorMessage ?? "")
+        }
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("学習状況について相談")
+                        .font(.title2.bold())
+                    Text("現在の小テストと匿名集計を文脈にして、オンデバイスAIが回答します。")
+                        .font(.subheadline)
+                        .foregroundStyle(LuminTheme.muted)
+                }
+                Spacer()
+                Image(systemName: "lock.shield.fill")
+                    .foregroundStyle(LuminTheme.teal)
+            }
+
+            HStack(spacing: 8) {
+                StatusPill(title: "(model.summary.responseCount)回答", systemImage: "chart.bar.fill")
+                StatusPill(title: gemma.state.title, systemImage: "cpu")
+            }
+        }
+        .padding(20)
+        .background(LuminTheme.paper)
+    }
+
+    private var welcome: some View {
+        LuminCard {
+            VStack(alignment: .leading, spacing: 14) {
+                Label("何を相談しますか？", systemImage: "bubble.left.and.sparkles")
+                    .font(.headline)
+                    .foregroundStyle(LuminTheme.teal)
+                Text(model.events.isEmpty
+                     ? "回答はまだありません。教材の内容をもとに相談できます。"
+                     : "正答率、再挑戦、ヒント利用、つまずきの傾向をもとに相談できます。")
+                    .font(.subheadline)
+                    .foregroundStyle(LuminTheme.muted)
+
+                if !gemma.state.isReady {
+                    GemmaStatusView()
+                }
+
+                ForEach(suggestions, id: \.self) { suggestion in
+                    Button(suggestion) {
+                        draft = suggestion
+                        Task { await send() }
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(isSending || !gemma.state.isReady)
+                }
+            }
+        }
+    }
+
+    private func messageBubble(_ message: ChatMessage) -> some View {
+        HStack {
+            if message.author == .teacher { Spacer(minLength: 42) }
+            Text(message.text)
+                .font(.body)
+                .textSelection(.enabled)
+                .padding(14)
+                .foregroundStyle(message.author == .teacher ? Color.white : LuminTheme.ink)
+                .background(
+                    message.author == .teacher ? LuminTheme.teal : LuminTheme.paper,
+                    in: RoundedRectangle(cornerRadius: 17, style: .continuous)
+                )
+            if message.author == .assistant { Spacer(minLength: 42) }
+        }
+    }
+
+    private var composer: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if !gemma.state.isReady && !isSending {
+                Text("AIモデルを準備すると質問できます。AIモデル設定を確認してください。")
+                    .font(.caption)
+                    .foregroundStyle(LuminTheme.coral)
+            }
+            HStack(alignment: .bottom, spacing: 10) {
+                TextField("学習状況について質問", text: $draft, axis: .vertical)
+                    .lineLimit(1...5)
+                    .textFieldStyle(.plain)
+                    .padding(13)
+                    .background(LuminTheme.canvas, in: RoundedRectangle(cornerRadius: 14))
+                    .focused($isInputFocused)
+                    .onSubmit { Task { await send() } }
+
+                Button {
+                    Task { await send() }
+                } label: {
+                    Image(systemName: "arrow.up")
+                        .font(.headline.bold())
+                        .foregroundStyle(.white)
+                        .frame(width: 44, height: 44)
+                        .background(LuminTheme.teal, in: Circle())
+                }
+                .disabled(trimmedDraft.isEmpty || isSending || !gemma.state.isReady)
+                .opacity(trimmedDraft.isEmpty || isSending || !gemma.state.isReady ? 0.45 : 1)
+                .accessibilityLabel("質問を送信")
+            }
+            Text("個別の解答本文や氏名はAIへ渡しません。提案は先生が確認して利用してください。")
+                .font(.caption2)
+                .foregroundStyle(LuminTheme.muted)
+        }
+        .padding(16)
+        .background(LuminTheme.paper)
+    }
+
+    private var trimmedDraft: String {
+        draft.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func send() async {
+        let question = trimmedDraft
+        guard !question.isEmpty, !isSending, gemma.state.isReady else { return }
+
+        let priorTurns = messages.suffix(6).map {
+            TeacherChatTurn(
+                role: $0.author == .teacher ? .teacher : .assistant,
+                text: $0.text
+            )
+        }
+        messages.append(ChatMessage(author: .teacher, text: question))
+        draft = ""
+        isInputFocused = false
+        isSending = true
+        defer { isSending = false }
+
+        do {
+            let answer = try await gemma.answerTeacherQuestion(
+                question,
+                summary: model.summary,
+                quiz: model.activeQuiz,
+                priorTurns: priorTurns
+            )
+            messages.append(ChatMessage(author: .assistant, text: answer))
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 }
