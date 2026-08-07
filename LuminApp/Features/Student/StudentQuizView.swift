@@ -19,6 +19,8 @@ struct StudentQuizView: View {
     @State private var generatedHint: String?
     @State private var isAnalyzing = false
     @State private var lastIncorrectAnswer = ""
+    @FocusState private var answerIsFocused: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let engine = RuleBasedLearningEngine()
 
@@ -37,16 +39,23 @@ struct StudentQuizView: View {
                 VStack(alignment: .leading, spacing: 22) {
                     progressHeader
                     questionCard
-                    if hintCount > 0 { hintCard }
+                    if hintCount > 0 {
+                        hintCard
+                            .transition(.opacity.combined(with: reduceMotion ? .identity : .move(edge: .bottom)))
+                    }
                     privacyFooter
                 }
-                .padding(28)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 28)
                 .frame(maxWidth: 800)
                 .frame(maxWidth: .infinity)
             }
         }
-        .background(LuminTheme.canvas)
+        .background(LuminPageBackground())
         .navigationBarBackButtonHidden()
+        .animation(.spring(response: 0.38, dampingFraction: 1), value: hintCount)
+        .sensoryFeedback(.success, trigger: feedback == .correct)
+        .sensoryFeedback(.warning, trigger: feedback == .tryAgain)
     }
 
     private var progressHeader: some View {
@@ -58,8 +67,10 @@ struct StudentQuizView: View {
                 Text("\(questionIndex + 1) / \(quiz.questions.count)")
                     .font(.subheadline.monospacedDigit().weight(.semibold))
             }
-            ProgressView(value: Double(questionIndex), total: Double(quiz.questions.count))
+            ProgressView(value: Double(questionIndex + 1), total: Double(quiz.questions.count))
                 .tint(LuminTheme.teal)
+                .accessibilityLabel("小テストの進捗")
+                .accessibilityValue("全\(quiz.questions.count)問中\(questionIndex + 1)問目")
         }
     }
 
@@ -71,7 +82,8 @@ struct StudentQuizView: View {
                     .foregroundStyle(LuminTheme.teal)
                     .textCase(.uppercase)
                 Text(question.prompt)
-                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                    .font(.system(.title, design: .rounded, weight: .bold))
+                    .tracking(-0.35)
                     .foregroundStyle(LuminTheme.ink)
 
                 TextField("答えを入力", text: $answer)
@@ -79,6 +91,11 @@ struct StudentQuizView: View {
                     .textFieldStyle(.plain)
                     .padding(16)
                     .background(LuminTheme.canvas, in: RoundedRectangle(cornerRadius: 14))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(answerIsFocused ? LuminTheme.teal.opacity(0.7) : Color.clear, lineWidth: 2)
+                    }
+                    .focused($answerIsFocused)
                     .submitLabel(.done)
                     .onSubmit { Task { await submit() } }
                     .disabled(isAnalyzing)
@@ -87,10 +104,12 @@ struct StudentQuizView: View {
                     Label("その考え方で正解です", systemImage: "checkmark.circle.fill")
                         .font(.headline)
                         .foregroundStyle(LuminTheme.teal)
+                        .transition(.opacity.combined(with: .scale(scale: 0.97)))
                 } else if feedback == .tryAgain {
                     Label("まだ少し違うようです。ヒントを手がかりにもう一度。", systemImage: "arrow.triangle.2.circlepath")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(LuminTheme.coral)
+                        .transition(.opacity)
                 }
 
                 Button {
@@ -108,7 +127,6 @@ struct StudentQuizView: View {
                 }
                 .buttonStyle(PrimaryButtonStyle())
                 .disabled(isAnalyzing || (answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && feedback != .correct))
-                .opacity(answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && feedback != .correct ? 0.45 : 1)
             }
         }
     }
@@ -163,7 +181,8 @@ struct StudentQuizView: View {
                 .font(.system(size: 54))
                 .foregroundStyle(LuminTheme.amber)
             Text("おつかれさまでした")
-                .font(.system(size: 34, weight: .bold, design: .rounded))
+                .font(.system(.largeTitle, design: .rounded, weight: .bold))
+                .tracking(-0.6)
             Text(sharesResults
                 ? "考え直した過程も、学びの大切な一部です。\n先生には匿名の分析結果だけが共有されました。"
                 : "考え直した過程も、学びの大切な一部です。\n今回はデモのため、結果は共有されていません。")
@@ -190,9 +209,14 @@ struct StudentQuizView: View {
             firstMisconception = result.misconception
         }
         if result.isCorrect {
-            feedback = .correct
+            withAnimation(.spring(response: 0.32, dampingFraction: 1)) {
+                feedback = .correct
+            }
+            answerIsFocused = false
         } else {
-            feedback = .tryAgain
+            withAnimation(.easeOut(duration: 0.2)) {
+                feedback = .tryAgain
+            }
             lastIncorrectAnswer = submittedAnswer
             if hintCount == 0 { hintCount = 1 }
             answer = ""

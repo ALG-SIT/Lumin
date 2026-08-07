@@ -6,6 +6,7 @@ struct StudentHomeView: View {
     @State private var hasStarted = false
     @State private var sharesResults = false
     @State private var joinCode = ""
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         NavigationStack {
@@ -21,6 +22,7 @@ struct StudentHomeView: View {
                     joinView
                 }
             }
+            .transition(.opacity.combined(with: reduceMotion ? .identity : .scale(scale: 0.985)))
             .toolbar {
                 ToolbarItem(placement: .automatic) {
                     Button("役割を選び直す", systemImage: "chevron.left") {
@@ -34,30 +36,30 @@ struct StudentHomeView: View {
         .onChange(of: model.sessionIsLive) { _, isLive in
             if !isLive && sharesResults { hasStarted = false }
         }
+        .animation(.spring(response: 0.34, dampingFraction: 1), value: hasStarted)
     }
 
     private var joinView: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("こんにちは")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(LuminTheme.teal)
-                    Text("今日の理解を、\n一緒に見つけよう。")
-                        .font(.system(size: 36, weight: .bold, design: .rounded))
-                        .foregroundStyle(LuminTheme.ink)
-                    Text("あなたの解答本文やヒントの会話は、この端末の中だけで処理されます。")
-                        .foregroundStyle(LuminTheme.muted)
-                }
+                LuminSectionHeader(
+                    "今日の理解を、一緒に見つけよう。",
+                    detail: "解答本文やヒントの会話は、この端末の中だけで処理されます。",
+                    eyebrow: "こんにちは"
+                )
 
                 LuminCard {
                     VStack(alignment: .leading, spacing: 16) {
-                        HStack {
-                            StatusPill(title: peerService.statusText, systemImage: peerService.connectedPeers.isEmpty ? "antenna.radiowaves.left.and.right" : "checkmark.circle.fill")
-                            Spacer()
-                            Text("参加ID \(model.participantToken)")
-                                .font(.caption.monospaced())
-                                .foregroundStyle(LuminTheme.muted)
+                        ViewThatFits(in: .horizontal) {
+                            HStack {
+                                connectionStatus
+                                Spacer()
+                                participantID
+                            }
+                            VStack(alignment: .leading, spacing: 10) {
+                                connectionStatus
+                                participantID
+                            }
                         }
 
                         if peerService.pendingAnalysisCount > 0 {
@@ -73,7 +75,13 @@ struct StudentHomeView: View {
                                 .keyboardType(.numberPad)
                                 .textContentType(.oneTimeCode)
                                 .font(.title3.monospacedDigit())
-                                .textFieldStyle(.roundedBorder)
+                                .textFieldStyle(.plain)
+                                .padding(14)
+                                .background(LuminTheme.canvas, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: 13, style: .continuous)
+                                        .stroke(LuminTheme.teal.opacity(joinCode.isEmpty ? 0.14 : 0.45))
+                                }
                                 .onChange(of: joinCode) { _, value in
                                     joinCode = String(value.filter(\.isNumber).prefix(4))
                                 }
@@ -112,6 +120,7 @@ struct StudentHomeView: View {
                         }
                         .buttonStyle(PrimaryButtonStyle())
                         .disabled(!peerService.connectedPeers.isEmpty && model.activeSession == nil)
+                        .sensoryFeedback(.impact(weight: .light), trigger: hasStarted)
                     }
                 }
 
@@ -122,11 +131,28 @@ struct StudentHomeView: View {
 
                 GemmaStatusView()
             }
-            .padding(28)
-            .frame(maxWidth: 760)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 28)
+            .frame(maxWidth: LuminTheme.narrowContentWidth)
             .frame(maxWidth: .infinity)
         }
-        .background(LuminTheme.canvas)
+        .background(LuminPageBackground())
+    }
+
+    private var connectionStatus: some View {
+        StatusPill(
+            title: peerService.statusText,
+            systemImage: peerService.connectedPeers.isEmpty
+                ? "antenna.radiowaves.left.and.right"
+                : "checkmark.circle.fill"
+        )
+    }
+
+    private var participantID: some View {
+        Text("参加ID \(model.participantToken)")
+            .font(.caption.monospaced())
+            .foregroundStyle(LuminTheme.muted)
+            .textSelection(.enabled)
     }
 
     private var startButtonTitle: String {

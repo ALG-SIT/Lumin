@@ -81,7 +81,7 @@ private struct AIModelManagerView: View {
                 .frame(maxWidth: 720)
                 .frame(maxWidth: .infinity)
             }
-            .background(LuminTheme.canvas)
+            .background(LuminPageBackground())
             .navigationTitle("オンデバイスAI")
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -131,7 +131,7 @@ private struct AIModelManagerView: View {
                         Spacer()
                     }
                     .padding(14)
-                    .background(.white, in: RoundedRectangle(cornerRadius: 14))
+                    .background(LuminTheme.paper, in: RoundedRectangle(cornerRadius: 14))
                 }
                 .buttonStyle(.plain)
             }
@@ -152,7 +152,7 @@ private struct AIModelManagerView: View {
                 }
             }
             .padding(14)
-            .background(.white, in: RoundedRectangle(cornerRadius: 14))
+            .background(LuminTheme.paper, in: RoundedRectangle(cornerRadius: 14))
         }
     }
 
@@ -240,7 +240,7 @@ private struct AIModelManagerView: View {
             }
         }
         .padding(16)
-        .background(.white, in: RoundedRectangle(cornerRadius: 16))
+        .background(LuminTheme.paper, in: RoundedRectangle(cornerRadius: 16))
         .overlay {
             RoundedRectangle(cornerRadius: 16)
                 .stroke(selected ? LuminTheme.teal.opacity(0.5) : .clear, lineWidth: 2)
@@ -254,7 +254,7 @@ private struct AIModelManagerView: View {
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .padding(12)
-                .background(.white, in: RoundedRectangle(cornerRadius: 12))
+                .background(LuminTheme.paper, in: RoundedRectangle(cornerRadius: 12))
             Text("Gemmaの利用規約へ同意したアカウントのReadトークンを入力してください。ダウンロード時にKeychainへこの端末内限定で保存します。")
                 .font(.caption)
                 .foregroundStyle(LuminTheme.muted)

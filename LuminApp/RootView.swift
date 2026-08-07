@@ -16,7 +16,8 @@ struct RootView: View {
             }
         }
         .tint(LuminTheme.teal)
-        .background(LuminTheme.canvas.ignoresSafeArea())
+        .background(LuminPageBackground())
+        .animation(.spring(response: 0.36, dampingFraction: 1), value: model.role)
         .onChange(of: model.role) { _, role in
             if role == nil { peerService.stop() }
         }
@@ -25,50 +26,42 @@ struct RootView: View {
 
 private struct RoleSelectionView: View {
     @EnvironmentObject private var model: AppModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         GeometryReader { proxy in
             ScrollView {
-                VStack(alignment: .leading, spacing: 34) {
+                VStack(alignment: .leading, spacing: 32) {
                     HStack(spacing: 12) {
                         Image(systemName: "sun.max.fill")
                             .foregroundStyle(LuminTheme.amber)
                         Text("LUMIN")
                             .font(.title3.weight(.black))
-                            .tracking(2)
+                            .tracking(1.6)
                     }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("Lumin")
 
-                    VStack(alignment: .leading, spacing: 14) {
+                    VStack(alignment: .leading, spacing: 12) {
                         Text("理解を照らし、\n次の学びにつなげる。")
-                            .font(.system(size: proxy.size.width > 700 ? 52 : 38, weight: .bold, design: .rounded))
+                            .font(.system(proxy.size.width > 700 ? .largeTitle : .title, design: .rounded, weight: .bold))
+                            .tracking(proxy.size.width > 700 ? -1.1 : -0.5)
                             .foregroundStyle(LuminTheme.ink)
                         Text("解答は端末の外へ出さず、必要な気づきだけを教室で共有します。")
-                            .font(.title3)
+                            .font(.title3.weight(.regular))
                             .foregroundStyle(LuminTheme.muted)
                             .fixedSize(horizontal: false, vertical: true)
                     }
 
-                    HStack(spacing: 16) {
-                        roleCard(
-                            title: "先生として始める",
-                            detail: "小テストを配信し、クラスの誤概念から次の10分を組み立てます。",
-                            icon: "rectangle.3.group.fill",
-                            color: LuminTheme.teal
-                        ) { model.role = .teacher }
-
-                        roleCard(
-                            title: "生徒として参加",
-                            detail: "自分のペースで解き、正解を見ずに段階ヒントを受け取ります。",
-                            icon: "pencil.and.scribble",
-                            color: LuminTheme.amber
-                        ) { model.role = .student }
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 16) { roleCards }
+                        VStack(spacing: 14) { roleCards }
                     }
                     .frame(maxWidth: 900)
 
-                    HStack(spacing: 20) {
-                        Label("インターネット不要", systemImage: "wifi.slash")
-                        Label("解答本文は端末内", systemImage: "lock.shield")
-                        Label("教師が最終判断", systemImage: "person.crop.circle.badge.checkmark")
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 20) { trustLabels }
+                        VStack(alignment: .leading, spacing: 10) { trustLabels }
                     }
                     .font(.caption.weight(.medium))
                     .foregroundStyle(LuminTheme.muted)
@@ -76,10 +69,36 @@ private struct RoleSelectionView: View {
                     GemmaStatusView()
                         .frame(maxWidth: 520)
                 }
-                .padding(32)
+                .padding(.horizontal, proxy.size.width > 700 ? 40 : 20)
+                .padding(.vertical, 28)
                 .frame(maxWidth: .infinity, minHeight: proxy.size.height, alignment: .center)
             }
+            .background(LuminPageBackground())
         }
+    }
+
+    @ViewBuilder
+    private var roleCards: some View {
+        roleCard(
+            title: "先生として始める",
+            detail: "小テストを配信し、クラスのつまずきから次の10分を組み立てます。",
+            icon: "rectangle.3.group.fill",
+            color: LuminTheme.teal
+        ) { choose(.teacher) }
+
+        roleCard(
+            title: "生徒として参加",
+            detail: "自分のペースで解き、正解を見る前に段階的なヒントを受け取ります。",
+            icon: "pencil.and.scribble",
+            color: LuminTheme.amber
+        ) { choose(.student) }
+    }
+
+    @ViewBuilder
+    private var trustLabels: some View {
+        Label("インターネット不要", systemImage: "wifi.slash")
+        Label("解答本文は端末内", systemImage: "lock.shield")
+        Label("先生が最終判断", systemImage: "person.crop.circle.badge.checkmark")
     }
 
     private func roleCard(
@@ -90,12 +109,8 @@ private struct RoleSelectionView: View {
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            VStack(alignment: .leading, spacing: 18) {
-                Image(systemName: icon)
-                    .font(.system(size: 28))
-                    .foregroundStyle(color)
-                    .frame(width: 56, height: 56)
-                    .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 16))
+            VStack(alignment: .leading, spacing: 16) {
+                LuminIconBadge(systemImage: icon, color: color, size: 54)
                 Text(title)
                     .font(.title2.bold())
                     .foregroundStyle(LuminTheme.ink)
@@ -103,19 +118,35 @@ private struct RoleSelectionView: View {
                     .font(.body)
                     .foregroundStyle(LuminTheme.muted)
                     .multilineTextAlignment(.leading)
-                Label("開く", systemImage: "arrow.right")
-                    .font(.headline)
-                    .foregroundStyle(color)
+                HStack {
+                    Text("続ける")
+                    Spacer()
+                    Image(systemName: "arrow.right")
+                }
+                .font(.headline)
+                .foregroundStyle(color)
             }
             .padding(24)
-            .frame(maxWidth: .infinity, minHeight: 260, alignment: .leading)
-            .background(.white)
+            .frame(maxWidth: .infinity, minHeight: 248, alignment: .leading)
+            .background(.regularMaterial)
             .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .stroke(color.opacity(0.18))
+                    .stroke(color.opacity(0.2), lineWidth: 1)
+            }
+            .shadow(color: color.opacity(0.08), radius: 22, y: 9)
+        }
+        .buttonStyle(LuminPressButtonStyle())
+        .accessibilityHint("\(title)画面を開きます")
+    }
+
+    private func choose(_ role: AppModel.Role) {
+        if reduceMotion {
+            model.role = role
+        } else {
+            withAnimation(.spring(response: 0.36, dampingFraction: 1)) {
+                model.role = role
             }
         }
-        .buttonStyle(.plain)
     }
 }

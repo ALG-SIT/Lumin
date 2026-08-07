@@ -15,7 +15,8 @@ struct LessonPlanEditorView: View {
                 HStack(alignment: .bottom) {
                     VStack(alignment: .leading, spacing: 5) {
                         Text("次の10分")
-                            .font(.system(size: 30, weight: .bold, design: .rounded))
+                            .font(.system(.largeTitle, design: .rounded, weight: .bold))
+                            .tracking(-0.6)
                         Text("AIの初期案を、先生の判断で仕上げます。")
                             .foregroundStyle(LuminTheme.muted)
                     }
@@ -104,7 +105,7 @@ struct LessonPlanEditorView: View {
             .frame(maxWidth: 1000)
             .frame(maxWidth: .infinity, alignment: .top)
         }
-        .background(LuminTheme.canvas)
+        .background(LuminPageBackground())
         .navigationTitle("次の10分")
         .onAppear {
             guard !hasLoaded else { return }

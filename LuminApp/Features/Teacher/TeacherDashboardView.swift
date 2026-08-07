@@ -43,6 +43,7 @@ struct TeacherDashboardView: View {
                 if let session = model.activeSession { peerService.sendSession(session) }
             }
         }
+        .navigationSplitViewStyle(.balanced)
     }
 
     private var sidebar: some View {
@@ -80,7 +81,7 @@ struct TeacherDashboardView: View {
             .padding(10)
         }
         .padding(.vertical, 18)
-        .background(LuminTheme.canvas)
+        .background(.regularMaterial)
         .navigationSplitViewColumnWidth(min: 220, ideal: 250)
     }
 
@@ -163,7 +164,7 @@ private struct TeacherAIChatView: View {
             Divider()
             composer
         }
-        .background(LuminTheme.canvas)
+        .background(LuminPageBackground())
         .navigationTitle("AIと対話")
         .alert("AIに質問できませんでした", isPresented: Binding(
             get: { errorMessage != nil },
@@ -196,7 +197,7 @@ private struct TeacherAIChatView: View {
             }
         }
         .padding(20)
-        .background(LuminTheme.paper)
+        .background(.regularMaterial)
     }
 
     private var welcome: some View {
@@ -277,7 +278,7 @@ private struct TeacherAIChatView: View {
                 .foregroundStyle(LuminTheme.muted)
         }
         .padding(16)
-        .background(LuminTheme.paper)
+        .background(.regularMaterial)
     }
 
     private var trimmedDraft: String {
@@ -336,7 +337,7 @@ private struct TeacherOverviewView: View {
             .frame(maxWidth: 1100)
             .frame(maxWidth: .infinity, alignment: .top)
         }
-        .background(LuminTheme.canvas)
+        .background(LuminPageBackground())
         .navigationTitle("理解の現在地")
     }
 
@@ -344,7 +345,8 @@ private struct TeacherOverviewView: View {
         HStack(alignment: .bottom) {
             VStack(alignment: .leading, spacing: 5) {
                 Text(model.activeQuiz.title)
-                    .font(.system(size: 30, weight: .bold, design: .rounded))
+                    .font(.system(.largeTitle, design: .rounded, weight: .bold))
+                    .tracking(-0.6)
                 Text("正答率ではなく、なぜ迷ったかを見ます。")
                     .foregroundStyle(LuminTheme.muted)
             }
@@ -356,7 +358,7 @@ private struct TeacherOverviewView: View {
     }
 
     private var metricGrid: some View {
-        HStack(spacing: 14) {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 190), spacing: 14)], spacing: 14) {
             metricCard(value: "\(summary.participantCount)", label: "参加端末", note: "匿名トークン")
             metricCard(value: summary.correctRate.formatted(.percent.precision(.fractionLength(0))), label: "初回正答率", note: "全\(summary.responseCount)回答")
             metricCard(value: summary.retrySuccessRate.formatted(.percent.precision(.fractionLength(0))), label: "再挑戦成功", note: "ヒント利用後")
@@ -473,44 +475,20 @@ private struct SessionControlView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
                 Text("小テスト配信")
-                    .font(.system(size: 30, weight: .bold, design: .rounded))
+                    .font(.system(.largeTitle, design: .rounded, weight: .bold))
+                    .tracking(-0.6)
 
                 LuminCard {
-                    HStack(spacing: 16) {
-                        Image(systemName: "books.vertical.fill")
-                            .font(.title2)
-                            .foregroundStyle(LuminTheme.teal)
-                            .frame(width: 42, height: 42)
-                            .background(LuminTheme.tealSoft, in: RoundedRectangle(cornerRadius: 12))
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text("教材を選択")
-                                .font(.headline)
-                            Text("5教科・6セットから授業に合う小テストを選べます")
-                                .font(.caption)
-                                .foregroundStyle(LuminTheme.muted)
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 16) {
+                            quizPickerLabel
+                            Spacer()
+                            quizPickerMenu
                         }
-                        Spacer()
-                        Menu {
-                            ForEach(SampleData.subjects, id: \.self) { subject in
-                                Section(subject) {
-                                    ForEach(model.availableQuizzes.filter { $0.subject == subject }) { quiz in
-                                        Button {
-                                            model.selectQuiz(quiz)
-                                        } label: {
-                                            if quiz.id == model.activeQuiz.id {
-                                                Label(quiz.title, systemImage: "checkmark")
-                                            } else {
-                                                Text(quiz.title)
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        } label: {
-                            Label("変更", systemImage: "chevron.up.chevron.down")
+                        VStack(alignment: .leading, spacing: 14) {
+                            quizPickerLabel
+                            quizPickerMenu
                         }
-                        .buttonStyle(.bordered)
-                        .disabled(model.sessionIsLive)
                     }
                 }
 
@@ -595,8 +573,45 @@ private struct SessionControlView: View {
             .frame(maxWidth: 1000)
             .frame(maxWidth: .infinity, alignment: .top)
         }
-        .background(LuminTheme.canvas)
+        .background(LuminPageBackground())
         .navigationTitle("小テスト配信")
+    }
+
+    private var quizPickerLabel: some View {
+        HStack(spacing: 14) {
+            LuminIconBadge(systemImage: "books.vertical.fill", size: 44)
+            VStack(alignment: .leading, spacing: 3) {
+                Text("教材を選択")
+                    .font(.headline)
+                Text("授業に合う小テストを選べます")
+                    .font(.caption)
+                    .foregroundStyle(LuminTheme.muted)
+            }
+        }
+    }
+
+    private var quizPickerMenu: some View {
+        Menu {
+            ForEach(SampleData.subjects, id: \.self) { subject in
+                Section(subject) {
+                    ForEach(model.availableQuizzes.filter { $0.subject == subject }) { quiz in
+                        Button {
+                            model.selectQuiz(quiz)
+                        } label: {
+                            if quiz.id == model.activeQuiz.id {
+                                Label(quiz.title, systemImage: "checkmark")
+                            } else {
+                                Text(quiz.title)
+                            }
+                        }
+                    }
+                }
+            }
+        } label: {
+            Label("教材を変更", systemImage: "chevron.up.chevron.down")
+        }
+        .buttonStyle(.bordered)
+        .disabled(model.sessionIsLive)
     }
 }
 
@@ -609,7 +624,8 @@ private struct SessionHistoryView: View {
             VStack(alignment: .leading, spacing: 22) {
                 VStack(alignment: .leading, spacing: 5) {
                     Text("授業履歴")
-                        .font(.system(size: 30, weight: .bold, design: .rounded))
+                        .font(.system(.largeTitle, design: .rounded, weight: .bold))
+                        .tracking(-0.6)
                     Text("保存するのは匿名の分析結果と採用した授業案だけです。最新100授業を端末内に保持します。")
                         .foregroundStyle(LuminTheme.muted)
                 }
@@ -638,7 +654,7 @@ private struct SessionHistoryView: View {
             .frame(maxWidth: 1000)
             .frame(maxWidth: .infinity, alignment: .top)
         }
-        .background(LuminTheme.canvas)
+        .background(LuminPageBackground())
         .navigationTitle("授業履歴")
         .confirmationDialog(
             "この授業履歴を削除しますか？",
