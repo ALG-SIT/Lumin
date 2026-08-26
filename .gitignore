@@ -6,4 +6,15 @@ DerivedData/
 xcuserdata/
 *.xccheckout
 *.xcscmblueprint
-LuminApp/Models/*.litertlm
+
+# Node
+node_modules/
+
+# Rust
+src-tauri/target/
+
+# Build output
+dist/
+
+# Models (large files)
+models/
