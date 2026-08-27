@@ -41,8 +41,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     env:
       # Root Cargo.toml is a virtual workspace, so cargo defaults to <root>/target.
-      # Force src-tauri/target to match the cache and bundle artifact paths.
-      CARGO_TARGET_DIR: src-tauri/target
+      # Absolute path so Tauri CLI's internal cwd (src-tauri) can't re-resolve it.
+      CARGO_TARGET_DIR: ${{ github.workspace }}/src-tauri/target
     steps:
       - name: Disable git CRLF conversion
         if: runner.os == 'Windows'
@@ -70,8 +70,9 @@ jobs:
     name: tauri build (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     env:
-      # Keep bundle output under src-tauri/target to match the upload globs below.
-      CARGO_TARGET_DIR: src-tauri/target
+      # Absolute path: Tauri CLI runs cargo from src-tauri/, which re-resolves
+      # a relative CARGO_TARGET_DIR into src-tauri/src-tauri/target.
+      CARGO_TARGET_DIR: ${{ github.workspace }}/src-tauri/target
     strategy:
       fail-fast: false
       matrix:
