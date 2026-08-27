@@ -2567,3 +2567,32 @@ h1 {
   font-size: 0.9rem;
 }
 
+/* ── セッション参加コード常時表示バナー ── */
+.join-code-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-4);
+  background: var(--lumin-indigo-soft);
+  border: 1px solid var(--lumin-primary);
+  border-radius: var(--radius-md);
+}
+
+.join-code-banner .join-code-value {
+  font-size: 1.5rem;
+  letter-spacing: 0.35em;
+  color: var(--lumin-primary);
+}
+
+.trust-labels {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2);
+  list-style: none;
+  padding: 0;
+  margin-top: var(--space-4);
+  color: var(--lumin-text-secondary);
+  font-size: 0.85rem;
+}

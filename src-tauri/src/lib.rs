@@ -437,6 +437,8 @@ pub fn run() {
             get_demo_lesson_plan,
             browse_teachers,
             session::student_join,
+            session::save_lesson_plan,
+            session::get_last_adopted_lesson_plan,
             session::list_quizzes,
             session::start_session,
             session::end_session,

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { DemoFlow } from "./components/DemoFlow";
 import { RoleSelection, type LuminRole } from "./components/RoleSelection";
-import { StudentJoin } from "./components/StudentJoin";
+import { StudentJoin, type JoinResultPayload } from "./components/StudentJoin";
 import { StudentQuiz } from "./components/StudentQuiz";
 import { TeacherDashboard } from "./components/TeacherDashboard";
 
@@ -25,8 +25,12 @@ export default function App() {
   const [role, setRole] = useState<Role>(null);
   const [studentJoined, setStudentJoined] = useState(false);
   const [studentSessionId, setStudentSessionId] = useState("");
+  const [participantToken, setParticipantToken] = useState<string | null>(null);
+  const [joinedQuiz, setJoinedQuiz] = useState<unknown>(null);
 
-  const handleStudentJoined = () => {
+  const handleStudentJoined = (payload: JoinResultPayload) => {
+    setParticipantToken(payload.participantToken);
+    setJoinedQuiz(payload.quiz);
     setStudentSessionId(crypto.randomUUID());
     setStudentJoined(true);
   };
@@ -71,6 +75,8 @@ export default function App() {
         {role === "student" && studentJoined && (
           <StudentQuiz
             sessionId={studentSessionId}
+            participantToken={participantToken}
+            quiz={(joinedQuiz as Parameters<typeof StudentQuiz>[0]["quiz"]) ?? undefined}
             onComplete={() => setStudentJoined(false)}
           />
         )}

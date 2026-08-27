@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use axum::http::StatusCode;
@@ -7,12 +6,20 @@ use tauri::{AppHandle, State};
 use tokio::sync::{watch, Mutex};
 use uuid::Uuid;
 
-use crate::lumin_core::models::{Quiz, QuizQuestion, StudentInfo};
+use crate::lumin_core::models::{Quiz, StudentInfo};
+use crate::lumin_core::LessonPlan;
 use crate::network::auth::{generate_join_code, JoinCodeState};
 use crate::network::dns_sd::{advertise_teacher, stop_advertise};
 use crate::network::server::{start_server_with_state, ServerState};
 
 const SESSION_PORT: u16 = 8765;
+
+/// 教室(mDNSインスタンス)名。参加コードは秘匿情報のため名前に含めない。
+/// 一意性確保のためセッションUUID先頭6桁(大文字hex)を添える。
+fn classroom_instance_name(session_id: &Uuid) -> String {
+    let hex = session_id.simple().to_string();
+    format!("Lumin教室 {}", hex[..6].to_uppercase())
+}
 
 #[derive(Clone, serde::Serialize)]
 pub struct StudentSummary {
@@ -37,6 +44,7 @@ pub struct SessionManager {
     active_quiz: Option<Quiz>,
     session_id: Option<Uuid>,
     join_code: Option<String>,
+    last_adopted_plan: Option<LessonPlan>,
 }
 
 impl SessionManager {
@@ -49,6 +57,7 @@ impl SessionManager {
             active_quiz: None,
             session_id: None,
             join_code: None,
+            last_adopted_plan: None,
         }
     }
 
@@ -63,127 +72,10 @@ impl Default for SessionManager {
     }
 }
 
-fn sample_quizzes() -> Vec<Quiz> {
-    vec![
-        Quiz {
-            id: "linear-functions-01".into(),
-            title: "一次関数 ミニチェック".into(),
-            subject: "中学数学".into(),
-            topic: Some("一次関数".into()),
-            questions: vec![
-                QuizQuestion {
-                    id: "math-01".into(),
-                    prompt: "y = 3x + 2 の傾きは？".into(),
-                    concept: "一次関数の傾き".into(),
-                    accepted_answers: vec!["3".into(), "+3".into()],
-                    misconception_answers: HashMap::from([("2".into(), "傾きと切片の混同".into())]),
-                    generic_misconception: "傾きの読み取り不足".into(),
-                    hints: vec![
-                        "x が1増えたとき、y がいくつ増えるかに注目しよう。".into(),
-                        "y = ax + b の a が変化の割合を表します。".into(),
-                    ],
-                    explanation: "y = ax + b では、x の係数 a が傾きです。".into(),
-                },
-                QuizQuestion {
-                    id: "math-02".into(),
-                    prompt: "y = -2x + 5 の切片は？".into(),
-                    concept: "一次関数の切片".into(),
-                    accepted_answers: vec!["5".into(), "+5".into()],
-                    misconception_answers: HashMap::from([
-                        ("-2".into(), "傾きと切片の混同".into()),
-                        ("2".into(), "符号の読み落とし".into()),
-                    ]),
-                    generic_misconception: "切片の読み取り不足".into(),
-                    hints: vec![
-                        "グラフが y 軸と交わる場所を考えよう。".into(),
-                        "x = 0 を式に代入すると切片が分かります。".into(),
-                    ],
-                    explanation: "x = 0 のとき y = 5 なので、切片は5です。".into(),
-                },
-            ],
-        },
-        Quiz {
-            id: "english-grammar-01".into(),
-            title: "英語文法チェック".into(),
-            subject: "英語".into(),
-            topic: Some("過去形".into()),
-            questions: vec![QuizQuestion {
-                id: "eng-01".into(),
-                prompt: "Yesterday she _____ to the store.".into(),
-                concept: "past tense".into(),
-                accepted_answers: vec!["went".into()],
-                misconception_answers: HashMap::from([("go".into(), "past tense error".into())]),
-                generic_misconception: "verb tense error".into(),
-                hints: vec![
-                    "What is the past tense of 'go'?".into(),
-                    "Think about irregular verbs.".into(),
-                ],
-                explanation: "The past tense of 'go' is 'went'.".into(),
-            }],
-        },
-        Quiz {
-            id: "japanese-grammar-01".into(),
-            title: "日本語文法テスト".into(),
-            subject: "日本語".into(),
-            topic: Some("助詞".into()),
-            questions: vec![QuizQuestion {
-                id: "jpn-01".into(),
-                prompt: "学校＿＿＿行きます。".into(),
-                concept: "格助詞".into(),
-                accepted_answers: vec!["に".into()],
-                misconception_answers: HashMap::new(),
-                generic_misconception: "助詞の使い分け不足".into(),
-                hints: vec![
-                    "場所を表す格助詞を考えよう。".into(),
-                    "移動の目的地には「に」を使う。".into(),
-                ],
-                explanation: "移動の目的地には「に」を使います。".into(),
-            }],
-        },
-        Quiz {
-            id: "science-density-01".into(),
-            title: "密度と体積".into(),
-            subject: "理科".into(),
-            topic: Some("密度".into()),
-            questions: vec![QuizQuestion {
-                id: "sci-01".into(),
-                prompt: "質量100g、体積50cm³の物体の密度は？".into(),
-                concept: "密度の計算".into(),
-                accepted_answers: vec!["2".into(), "2g/cm3".into(), "2g/cm³".into()],
-                misconception_answers: HashMap::from([("0.5".into(), "質量と体積の逆転".into())]),
-                generic_misconception: "密度の公式の誤用".into(),
-                hints: vec![
-                    "密度 = 質量 ÷ 体積 です。".into(),
-                    "100 ÷ 50 を計算してみよう。".into(),
-                ],
-                explanation: "密度 = 質量 ÷ 体積 = 100 ÷ 50 = 2 g/cm³ です。".into(),
-            }],
-        },
-        Quiz {
-            id: "social-history-01".into(),
-            title: "明治維新の要点".into(),
-            subject: "社会".into(),
-            topic: Some("日本史".into()),
-            questions: vec![QuizQuestion {
-                id: "soc-01".into(),
-                prompt: "明治維新が起こった年は？".into(),
-                concept: "明治維新".into(),
-                accepted_answers: vec!["1868".into()],
-                misconception_answers: HashMap::from([("1867".into(), "大政奉還と混同".into())]),
-                generic_misconception: "年号と西暦の混同".into(),
-                hints: vec![
-                    "江戸時代が終わり、明治時代が始まった年です。".into(),
-                    "大政奉還の翌年に政府が発足しました。".into(),
-                ],
-                explanation: "1868年に明治政府が成立し、明治維新が始まりました。".into(),
-            }],
-        },
-    ]
-}
-
 #[tauri::command]
 pub async fn list_quizzes() -> Result<Vec<Quiz>, String> {
-    Ok(sample_quizzes())
+    use crate::lumin_core::demo_data;
+    Ok(demo_data::demo_quiz_bank())
 }
 
 /// 学生が教室へ参加する: `http://{host}:{port}/students/join` を叩き、
@@ -194,6 +86,7 @@ pub async fn student_join(
     port: u16,
     session_id: Option<String>,
     join_code: String,
+    _manager: tauri::State<'_, Mutex<SessionManager>>,
 ) -> Result<serde_json::Value, String> {
     if join_code.len() != 4 || !join_code.chars().all(|c| c.is_ascii_digit()) {
         return Err("参加コードは4桁の数字で入力してください".into());
@@ -230,6 +123,17 @@ pub async fn student_join(
             if let Some(obj) = body.as_object_mut() {
                 obj.insert("host".into(), serde_json::Value::String(host));
                 obj.insert("port".into(), serde_json::Value::from(port));
+                // 配信中クイズを学生へ届ける(main実装の activeQuiz 相当)
+                let manager = _manager.lock().await;
+                obj.insert(
+                    "quiz".to_string(),
+                    manager
+                        .active_quiz
+                        .clone()
+                        .map_or(serde_json::Value::Null, |q| {
+                            serde_json::to_value(q).expect("quiz serializable")
+                        }),
+                );
             }
             Ok(body)
         }
@@ -250,7 +154,10 @@ pub async fn start_session(
         return Err("すでにセッションが進行中です".into());
     }
 
-    let quizzes = sample_quizzes();
+    let quizzes: Vec<Quiz> = {
+        use crate::lumin_core::demo_data;
+        demo_data::demo_quiz_bank()
+    };
     let quiz = quizzes
         .into_iter()
         .find(|q| q.id == quiz_id)
@@ -277,7 +184,7 @@ pub async fn start_session(
     let advertise_handle = advertise_teacher(
         &app,
         SESSION_PORT,
-        &format!("Lumin教室 {}", join_code),
+        &classroom_instance_name(&session_id),
         &session_id.to_string(),
         true,
     )
@@ -351,4 +258,42 @@ pub async fn kick_student(
     students.retain(|s| s.participant_token != student_id);
 
     Ok(())
+}
+
+/// 授業案をセッション中メモリへ採用保存(現行スコープ: 端末内保持)。
+#[tauri::command]
+pub async fn save_lesson_plan(
+    plan_json: String,
+    state: tauri::State<'_, Mutex<SessionManager>>,
+) -> Result<(), String> {
+    let plan: LessonPlan =
+        serde_json::from_str(&plan_json).map_err(|e| format!("授業案の解析に失敗: {e}"))?;
+    state.lock().await.last_adopted_plan = Some(plan);
+    Ok(())
+}
+
+/// 直近で採用した授業案を取得(未採用なら null)。
+#[tauri::command]
+pub async fn get_last_adopted_lesson_plan(
+    state: tauri::State<'_, Mutex<SessionManager>>,
+) -> Result<Option<LessonPlan>, String> {
+    Ok(state.lock().await.last_adopted_plan.clone())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn classroom_instance_name_hides_join_code_and_is_unique() {
+        let a = Uuid::new_v4();
+        let b = Uuid::new_v4();
+        let name_a = classroom_instance_name(&a);
+        let name_b = classroom_instance_name(&b);
+        assert!(name_a.starts_with("Lumin教室 "));
+        let frag = &name_a["Lumin教室 ".len()..];
+        assert_eq!(frag.len(), 6);
+        assert!(frag.chars().all(|c| c.is_ascii_hexdigit()));
+        assert_ne!(frag, &name_b["Lumin教室 ".len()..]);
+    }
 }

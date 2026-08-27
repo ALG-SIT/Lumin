@@ -101,7 +101,12 @@ export function RoleSelection({ onSelect }: RoleSelectionProps) {
           icon={<DemoIcon />}
           onSelect={onSelect}
         />
-      </div>
+            <ul className="trust-labels" aria-label="プライバシーの特徴">
+        <li>インターネット接続なしで利用できます</li>
+        <li>解答本文は生徒の端末から出ません</li>
+        <li>最終判断をするのは先生です</li>
+      </ul>
+</div>
     </section>
   );
 }

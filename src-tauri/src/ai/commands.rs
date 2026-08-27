@@ -51,8 +51,15 @@ pub async fn analyze_answer(
             // but prevents leaking via other channels (e.g. hint generation)
             let _sanitized = sanitize_hint(&analysis.hint, &question, hint_level);
 
+            // LLM の判定欄を信頼せず、受理答案との正規化一致で確定させる。
+            let normalize = |v: &str| v.replace(' ', "").to_lowercase();
+            let is_correct = question
+                .accepted_answers
+                .iter()
+                .any(|a| normalize(a) == normalize(&student_answer));
+
             Ok(AnswerAnalysis {
-                is_correct: false,
+                is_correct,
                 misconception: Some(analysis.misconception),
             })
         }
@@ -71,21 +78,37 @@ pub async fn analyze_answer(
 /// Generate a hint for a question at the given level (1–3).
 ///
 /// Level 1 = directional nudge, level 2 = relevant concept, level 3 = worked
-/// intermediate step. The current implementation returns a deterministic mock
-/// string; the real AI path will call `generate_text` with a hint prompt.
+/// intermediate step. Calls `generate_text` with a hint prompt that explicitly
+/// forbids leaking the answer ([`crate::ai::guard`] still guards output on the
+/// analysis path). When no model is loaded this returns `Err` and the
+/// frontend falls back to the question bank hints (`question.hints`),
+/// mirroring the original iOS behavior.
 #[tauri::command]
 pub async fn generate_hint(
     question_id: String,
     concept: String,
     hint_level: i32,
-    _state: State<'_, AppState>,
+    state: State<'_, AppState>,
 ) -> Result<String, String> {
-    let _ = (question_id, hint_level);
+    let _ = &question_id;
 
     let level = hint_level.clamp(1, 3);
-    Ok(format!(
-        "ヒント{level}: これは「{concept}」のモック出力です。モデルファイルを配置すると実際の Gemma 推論が有効になります。"
-    ))
+    let prompt = format!(
+        "問題の概念「{concept}」について、生徒が自力で答えに近づけるためのヒントを{level}段階目として日本語で一文だけ出力してください。答えそのものは絶対に書かないでください。"
+    );
+
+    let opts = GenerateOptions {
+        prompt,
+        max_tokens: Some(96),
+        temperature: Some(0.5),
+        use_chat_template: Some(true),
+    };
+
+    let result = generate_text(&state, opts)
+        .await
+        .map_err(|e| format!("AIモデルが未ロードのためヒント生成できません: {e}"))?;
+
+    Ok(result.text.trim().to_string())
 }
 
 // ---------------------------------------------------------------------------
@@ -163,23 +186,44 @@ struct TeacherChatContext {
 pub async fn chat_with_teacher(
     message: String,
     context_json: String,
-    _state: State<'_, AppState>,
+    state: State<'_, AppState>,
 ) -> Result<String, String> {
     // Validate that the inputs are well-formed JSON so the frontend gets a
     // clear error early, even though we don't use the parsed values yet.
     let ctx: TeacherChatContext = serde_json::from_str(&context_json)
         .map_err(|e| format!("Invalid chat context JSON: {}", e))?;
 
-    let _ = (
-        ctx.class_summary,
-        ctx.active_quiz,
-        ctx.recent_messages,
-        message,
+    let summary_brief = format!(
+        "参加{}名/回答{}件",
+        ctx.class_summary.participant_count, ctx.class_summary.response_count
+    );
+    let quiz_brief = ctx
+        .active_quiz
+        .as_ref()
+        .map(|q| q.title.clone())
+        .unwrap_or_else(|| "なし".to_string());
+    let recent = if ctx.recent_messages.is_empty() {
+        String::new()
+    } else {
+        format!("\n最近の発言: {}", ctx.recent_messages.join(" / "))
+    };
+
+    let prompt = format!(
+        "あなたはLuminの授業アシスタントです。教師からの質問に日本語で簡潔に答えてください。\nクラス状況: {summary_brief}\n配信中クイズ: {quiz_brief}{recent}\n質問: {message}"
     );
 
-    Ok(
-        "これはAIチャットのモック出力です。モデルファイルを配置すると実際の Gemma 推論が有効になります。".to_string(),
-    )
+    let opts = GenerateOptions {
+        prompt,
+        max_tokens: Some(256),
+        temperature: Some(0.6),
+        use_chat_template: Some(true),
+    };
+
+    let result = generate_text(&state, opts)
+        .await
+        .map_err(|e| format!("AIモデルが未ロードのため応答できません: {e}"))?;
+
+    Ok(result.text.trim().to_string())
 }
 
 // ---------------------------------------------------------------------------

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 
 export interface MisconceptionSummary {
@@ -36,6 +36,25 @@ export function LessonPlanEditor({ classSummary, onAdopted }: LessonPlanEditorPr
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // 初期テンプレートを生成(UIブロックなし・静かに行う/main実装同等)
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const result = await invoke<LessonPlan>("generate_lesson_plan", {
+          classSummaryJson: JSON.stringify(classSummary),
+        });
+        if (!cancelled) setPlan(result);
+      } catch {
+        // 初期生成失敗は手動再生成に譲る
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const regenerate = async () => {
     setLoading(true);

@@ -11,7 +11,6 @@ export interface Quiz {
   id: string;
   title: string;
   subject: string;
-  question_count: number;
   questions: QuizQuestion[];
 }
 
@@ -21,11 +20,15 @@ export interface Student {
 }
 
 export interface TeacherSessionControlProps {
-  onSessionStarted: () => void;
+  /** セッション開始成功時に参加コードを上位へ通知 */
+  onSessionStarted: (joinCode: string) => void;
+  /** セッション終了時に通知(常時表示バナー解除用) */
+  onSessionEnded?: () => void;
 }
 
 export function TeacherSessionControl({
   onSessionStarted,
+  onSessionEnded,
 }: TeacherSessionControlProps) {
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [selectedQuiz, setSelectedQuiz] = useState<Quiz | null>(null);
@@ -67,7 +70,7 @@ export function TeacherSessionControl({
       });
       setJoinCode(code);
       setSessionActive(true);
-      onSessionStarted();
+      onSessionStarted(code);
     } catch (e) {
       setError(String(e));
     } finally {
@@ -79,6 +82,7 @@ export function TeacherSessionControl({
     setIsLoading(true);
     try {
       await invoke("end_session");
+      onSessionEnded?.();
       setSessionActive(false);
       setJoinCode(null);
       setStudents([]);
@@ -143,7 +147,7 @@ export function TeacherSessionControl({
                         >
                           <span className="quiz-card-title">{q.title}</span>
                           <span className="quiz-card-meta">
-                            {q.question_count}問
+                            {q.questions.length}問
                           </span>
                         </button>
                       ))}
@@ -173,7 +177,7 @@ export function TeacherSessionControl({
                     {selectedQuiz.title}
                   </h3>
                   <p className="selected-quiz-meta">
-                    {selectedQuiz.question_count}問
+                    {selectedQuiz.questions.length}問
                   </p>
                 </div>
               </div>

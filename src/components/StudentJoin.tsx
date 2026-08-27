@@ -8,8 +8,14 @@ export interface DiscoveredTeacher {
   session_uuid: string;
 }
 
+export interface JoinResultPayload {
+  participantToken: string | null;
+  quiz: unknown | null;
+}
+
 export interface StudentJoinProps {
-  onJoined: () => void;
+  /** 参加成功時、サーバ応答(token/配信中クイズ)を上位へ通知 */
+  onJoined: (result: JoinResultPayload) => void;
   onReset: () => void;
 }
 
@@ -38,13 +44,13 @@ export function StudentJoin({ onJoined, onReset }: StudentJoinProps) {
   const handleJoin = async (teacher: DiscoveredTeacher) => {
     setError(null);
     try {
-      await invoke("student_join", {
+      const res = await invoke<JoinResultPayload>("student_join", {
         host: teacher.host,
         port: teacher.port,
         sessionId: teacher.session_uuid,
         joinCode,
       });
-      onJoined();
+      onJoined(res);
     } catch (e) {
       setError(String(e));
     }
@@ -54,13 +60,13 @@ export function StudentJoin({ onJoined, onReset }: StudentJoinProps) {
     if (!manualIp || !manualPort || !joinCode) return;
     setError(null);
     try {
-      await invoke("student_join", {
+      const res = await invoke<JoinResultPayload>("student_join", {
         host: manualIp,
         port: parseInt(manualPort, 10),
         sessionId: "",
         joinCode,
       });
-      onJoined();
+      onJoined(res);
     } catch (e) {
       setError(String(e));
     }

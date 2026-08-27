@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { ModelManager } from "./ModelManager";
 import { TeacherSessionControl } from "./TeacherSessionControl";
 import { LessonPlanEditor } from "./LessonPlanEditor";
 import { TeacherChat } from "./TeacherChat";
@@ -59,6 +60,7 @@ function ChatView({
 
 export function TeacherDashboard({ onReset }: TeacherDashboardProps) {
   const [tab, setTab] = useState<TeacherTab>("dashboard");
+  const [sessionCode, setSessionCode] = useState<string | null>(null);
   const [summary, setSummary] = useState<ClassSummary | null>(null);
   const [events, setEvents] = useState<AnalysisEvent[]>([]);
   const [isLoadingDemo, setIsLoadingDemo] = useState(false);
@@ -131,6 +133,14 @@ export function TeacherDashboard({ onReset }: TeacherDashboardProps) {
       </nav>
 
       <div className="teacher-content">
+        {/* 参加コード常時表示(セッション有効中・全タブ共通) */}
+        {sessionCode && (
+          <div className="join-code-banner" role="status" aria-live="polite">
+            <span className="join-code-label">参加コード</span>
+            <strong className="join-code-value">{sessionCode}</strong>
+          </div>
+        )}
+
         {tab === "dashboard" && (
           <div className="teacher-dashboard">
             <div className="teacher-dashboard-header">
@@ -278,7 +288,13 @@ export function TeacherDashboard({ onReset }: TeacherDashboardProps) {
           </div>
         )}
         {tab === "session" && (
-          <TeacherSessionControl onSessionStarted={() => setTab("dashboard")} />
+          <TeacherSessionControl
+            onSessionStarted={(code) => {
+              setSessionCode(code);
+              setTab("dashboard");
+            }}
+            onSessionEnded={() => setSessionCode(null)}
+          />
         )}
         {tab === "lesson" && summary && (
           <LessonPlanEditor
@@ -304,7 +320,13 @@ export function TeacherDashboard({ onReset }: TeacherDashboardProps) {
           </div>
         )}
         {tab === "chat" && (
-          <ChatView classSummary={summary} activeQuiz={activeQuiz} />
+          <>
+            <section className="model-manager-panel">
+              <h2>AIモデル管理</h2>
+              <ModelManager />
+            </section>
+            <ChatView classSummary={summary} activeQuiz={activeQuiz} />
+          </>
         )}
       </div>
     </section>
