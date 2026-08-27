@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { isTauriEnvironment } from "../lib/tauri";
 
 export interface DemoFlowProps {
   onReset?: () => void;
@@ -34,7 +35,6 @@ const DEMO_STEPS: DemoStep[] = [
   { label: "授業案生成", detail: "誤概念に基づく授業計画を作成中" },
   { label: "デモ完了", detail: "3分デモが完了しました" },
 ];
-
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
@@ -47,6 +47,12 @@ export function DemoFlow({ onReset }: DemoFlowProps) {
 
   const runDemo = async () => {
     setError(null);
+    if (!isTauriEnvironment()) {
+      setError(
+        "Luminデスクトップアプリから実行してください(ターミナルで bun run tauri dev)"
+      );
+      return;
+    }
     setCurrentStep(0);
 
     try {
@@ -78,6 +84,7 @@ export function DemoFlow({ onReset }: DemoFlowProps) {
       // Step 5: Complete
       setCurrentStep(5);
     } catch (e) {
+      console.error("DemoFlow invoke failed", e);
       setError(String(e));
     }
   };
@@ -91,13 +98,23 @@ export function DemoFlow({ onReset }: DemoFlowProps) {
 
       {currentStep === -1 && (
         <div className="demo-intro">
-          <button
-            type="button"
-            className="demo-start-button"
-            onClick={runDemo}
-          >
-            デモを始める
-          </button>
+          {isTauriEnvironment() ? (
+            <button
+              type="button"
+              className="demo-start-button"
+              onClick={runDemo}
+            >
+              デモを始める
+            </button>
+          ) : (
+            <p className="demo-error" role="status">
+              このデモはLuminデスクトップアプリでのみ実行できます。
+              ブラウザプレビューでは動作しません。
+              ターミナルで
+              <code> bun run tauri dev </code>
+              を実行して起動してください。
+            </p>
+          )}
           {onReset && (
             <button
               type="button"
@@ -199,8 +216,13 @@ export function DemoFlow({ onReset }: DemoFlowProps) {
       )}
 
       {error && (
-        <div className="demo-error">
-          エラーが発生しました: {error}
+        <div className="demo-error" role="alert">
+          <p>エラーが発生しました: {error}</p>
+          {isTauriEnvironment() && (
+            <button type="button" className="reset-button" onClick={runDemo}>
+              もう一度試す
+            </button>
+          )}
         </div>
       )}
 
