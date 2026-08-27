@@ -1,5 +1,6 @@
 :root {
   /* Lumin purple / indigo theme */
+  --lumin-primary: var(--lumin-indigo);
   --lumin-purple: #7c3aed;
   --lumin-purple-light: #a78bfa;
   --lumin-purple-dark: #5b21b6;
