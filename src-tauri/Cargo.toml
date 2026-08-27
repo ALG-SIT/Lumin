@@ -30,7 +30,9 @@ uuid = { version = "1", features = ["serde", "v4"] }
 chrono = { version = "0.4", features = ["serde"] }
 
 ort = { version = "2.0.0-rc.13", features = ["half"] }
-tokenizers = { version = "0.23", features = [] }
+# esaxx_fast dropped: esaxx-rs build.rs hardcodes /MT (static CRT), which
+# conflicts with ort's prebuilt /MD onnxruntime.lib on MSVC (LNK2038/LNK2005).
+tokenizers = { version = "0.23", default-features = false, features = ["progressbar", "onig"] }
 ndarray = "0.17"
 sha2 = "0.11"
 hex = "0.4"
