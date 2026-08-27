@@ -5,6 +5,7 @@ mod network;
 pub mod persistence;
 mod session;
 
+use crate::network::dns_sd::browse_teachers;
 use chrono::Utc;
 use inference::generate::{GenerateOptions, GenerateResult};
 use inference::model_download::DownloadResult;
@@ -434,6 +435,8 @@ pub fn run() {
             submit_demo_events,
             get_demo_quiz_summary,
             get_demo_lesson_plan,
+            browse_teachers,
+            session::student_join,
             session::list_quizzes,
             session::start_session,
             session::end_session,

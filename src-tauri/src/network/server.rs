@@ -141,6 +141,33 @@ async fn ack_analysis(
     Ok(StatusCode::OK)
 }
 
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct StudentJoinBody {
+    participant_token: Option<String>,
+}
+
+/// `POST /students/join` — register a student for the active session.
+///
+/// 参加コード(X-Lumin-Join-Code)での認証のみを要求する(セッション照合はコード自体が担う)。
+async fn students_join(
+    State(state): State<Arc<ServerState>>,
+    axum::Json(body): axum::Json<StudentJoinBody>,
+) -> Json<serde_json::Value> {
+    let token = body
+        .participant_token
+        .filter(|t| !t.is_empty())
+        .unwrap_or_else(|| Uuid::new_v4().to_string());
+    let mut students = state.students.write().await;
+    if !students.iter().any(|s| s.participant_token == token) {
+        students.push(StudentInfo {
+            participant_token: token.clone(),
+            connected_at: Utc::now(),
+        });
+    }
+    Json(serde_json::json!({ "participantToken": token }))
+}
+
 /// `GET /students` — list connected students.
 /// Teacher-only: requires `X-Lumin-Teacher-Token` header.
 async fn list_students(State(state): State<Arc<ServerState>>) -> Json<StudentList> {
@@ -246,6 +273,7 @@ pub fn build_router(state: Arc<ServerState>) -> Router {
     let classroom_routes = Router::new()
         .route("/session", get(session_info))
         .route("/analysis", post(submit_analysis))
+        .route("/students/join", post(students_join))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             session_uuid_middleware,
@@ -353,6 +381,62 @@ mod tests {
             let code = generate_join_code().parse::<u32>().unwrap();
             assert!(code <= 9999, "code {code} exceeds maximum 9999");
         }
+    }
+
+    #[tokio::test]
+    async fn students_join_registers_student_and_is_visible_to_teacher() {
+        use crate::network::auth::JoinCodeState;
+
+        let session_uuid = Uuid::new_v4();
+        let state = Arc::new(ServerState {
+            session_id: Some("s".into()),
+            join_code: Arc::new(JoinCodeState::new("1234".into())),
+            teacher_token: "teacher-token".into(),
+            active_session: RwLock::new(Some(session_uuid)),
+            students: RwLock::new(Vec::new()),
+            analysis_events: RwLock::new(Vec::new()),
+        });
+        let router = build_router(state.clone());
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+
+        let client = reqwest::Client::new();
+        let resp = client
+            .post(format!("http://127.0.0.1:{port}/students/join"))
+            .header("X-Lumin-Join-Code", "1234")
+            .header("X-Lumin-Session-ID", session_uuid.to_string())
+            .json(&serde_json::json!({}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), 200, "join must succeed with valid headers");
+        let body: serde_json::Value = resp.json().await.unwrap();
+        let token = body["participantToken"].as_str().unwrap().to_string();
+
+        let list = client
+            .get(format!("http://127.0.0.1:{port}/students"))
+            .header("X-Lumin-Teacher-Token", "teacher-token")
+            .send()
+            .await
+            .unwrap();
+        assert!(list.status().is_success());
+        let v: serde_json::Value = list.json().await.unwrap();
+        let arr = v["students"].as_array().expect("students array");
+        assert_eq!(arr.len(), 1);
+        assert_eq!(arr[0]["participantToken"].as_str(), Some(token.as_str()));
+
+        // 誤コードは401
+        let bad = client
+            .post(format!("http://127.0.0.1:{port}/students/join"))
+            .header("X-Lumin-Join-Code", "9999")
+            .header("X-Lumin-Session-ID", session_uuid.to_string())
+            .json(&serde_json::json!({}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(bad.status(), reqwest::StatusCode::UNAUTHORIZED);
+        assert_eq!(state.students.read().await.len(), 1);
     }
 
     #[tokio::test]

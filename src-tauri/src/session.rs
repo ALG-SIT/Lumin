@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use axum::http::StatusCode;
+
 use tauri::{AppHandle, State};
 use tokio::sync::{watch, Mutex};
 use uuid::Uuid;
@@ -182,6 +184,58 @@ fn sample_quizzes() -> Vec<Quiz> {
 #[tauri::command]
 pub async fn list_quizzes() -> Result<Vec<Quiz>, String> {
     Ok(sample_quizzes())
+}
+
+/// 学生が教室へ参加する: `http://{host}:{port}/students/join` を叩き、
+/// 参加コード認証の下で自分をサーバの学生一覧へ登録する。
+#[tauri::command]
+pub async fn student_join(
+    host: String,
+    port: u16,
+    session_id: Option<String>,
+    join_code: String,
+) -> Result<serde_json::Value, String> {
+    if join_code.len() != 4 || !join_code.chars().all(|c| c.is_ascii_digit()) {
+        return Err("参加コードは4桁の数字で入力してください".into());
+    }
+    if host.is_empty() || port == 0 {
+        return Err("接続先が正しくありません".into());
+    }
+    let base = crate::network::dns_sd::classroom_base_url(&host, port);
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .map_err(|e| format!("HTTPクライアント初期化に失敗しました: {e}"))?;
+    let mut req = client
+        .post(format!("{base}/students/join"))
+        .header("X-Lumin-Join-Code", &join_code);
+    // 発見経路ではセッションUUID付き。手動入力(sessionId="")では省略。
+    let session_id = session_id.filter(|s| !s.is_empty());
+    if let Some(id) = session_id {
+        req = req.header("X-Lumin-Session-ID", id);
+    }
+
+    let resp = req
+        .json(&serde_json::json!({}))
+        .send()
+        .await
+        .map_err(|e| format!("教師端末へ接続できませんでした: {e}"))?;
+
+    match resp.status() {
+        StatusCode::OK => {
+            let mut body: serde_json::Value = resp
+                .json()
+                .await
+                .map_err(|e| format!("応答の解析に失敗: {e}"))?;
+            if let Some(obj) = body.as_object_mut() {
+                obj.insert("host".into(), serde_json::Value::String(host));
+                obj.insert("port".into(), serde_json::Value::from(port));
+            }
+            Ok(body)
+        }
+        StatusCode::UNAUTHORIZED => Err("参加コードが正しくありません".into()),
+        status => Err(format!("サーバがエラーを返しました ({status})")),
+    }
 }
 
 #[tauri::command]
