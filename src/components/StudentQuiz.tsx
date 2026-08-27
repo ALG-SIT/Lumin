@@ -7,6 +7,9 @@ export interface QuizQuestion {
   concept: string;
   acceptedAnswers: string[];
   hints: string[];
+  /** Rust側 QuizQuestion の必須フィールド(deserialize契約) */
+  genericMisconception: string;
+  explanation: string;
 }
 
 export interface Quiz {
@@ -19,6 +22,8 @@ export interface Quiz {
 export interface StudentQuizProps {
   sessionId: string;
   quiz?: Quiz;
+  /** サーバ /students/join 応答の実トークン(無ければ従来プレフィックス) */
+  participantToken?: string | null;
   onComplete: () => void;
 }
 
@@ -41,6 +46,8 @@ const SAMPLE_QUIZ: Quiz = {
         "y = mx + b の形で、x の係数 m が傾きです",
         "切片は 4 です。傾きはもう一つの数です",
       ],
+      genericMisconception: "傾きの符号の読み落とし",
+      explanation: "y = mx + b の x の係数 m が傾き。ここでは m = 3。",
     },
     {
       id: "lf-02",
@@ -51,6 +58,8 @@ const SAMPLE_QUIZ: Quiz = {
         "y = mx + b の b が切片です",
         "x = 0 のときの y の値を考えてみましょう",
       ],
+      genericMisconception: "切片の計算漏れ",
+      explanation: "y = mx + b の定数項 b が切片。ここでは b = 5。",
     },
     {
       id: "lf-03",
@@ -61,6 +70,8 @@ const SAMPLE_QUIZ: Quiz = {
         "y = 2x + b の形で表せます",
         "x = 1, y = 5 を代入して b を求めましょう",
       ],
+      genericMisconception: "一次関数の式",
+      explanation: "b = 5 - 2×1 = 3 より y = 2x + 3。",
     },
     {
       id: "lf-04",
@@ -71,6 +82,8 @@ const SAMPLE_QUIZ: Quiz = {
         "傾きは x の増加量に対する y の増加量です",
         "増加量の比を式にすると y の増加 / x の増加 です",
       ],
+      genericMisconception: "変化量の分子と分母の逆転",
+      explanation: "傾き = yの増加量 ÷ xの増加量 = 4 ÷ 1 = 4。",
     },
     {
       id: "lf-05",
@@ -81,6 +94,8 @@ const SAMPLE_QUIZ: Quiz = {
         "x に 2 を代入して計算します",
         "-2 × 2 を先に計算し、最後に 6 を足します",
       ],
+      genericMisconception: "符号の計算ミス",
+      explanation: "y = -2×2 + 6 = -4 + 6 = 2。",
     },
   ],
 };
@@ -88,6 +103,7 @@ const SAMPLE_QUIZ: Quiz = {
 export function StudentQuiz({
   sessionId,
   quiz: quizProp,
+  participantToken,
   onComplete,
 }: StudentQuizProps) {
   const quiz = quizProp ?? SAMPLE_QUIZ;
@@ -117,9 +133,9 @@ export function StudentQuiz({
     async (level: number) => {
       try {
         const hint = await invoke<string>("generate_hint", {
-          question_id: question.id,
+          questionId: question.id,
           concept: question.concept,
-          hint_level: level,
+          hintLevel: level,
         });
         setGeneratedHint(hint);
       } catch (e) {
@@ -137,9 +153,9 @@ export function StudentQuiz({
 
     try {
       const result = await invoke<AnswerAnalysis>("analyze_answer", {
-        question_json: JSON.stringify(question),
-        student_answer: answer,
-        hint_level: hintCount + 1,
+        questionJson: JSON.stringify(question),
+        studentAnswer: answer,
+        hintLevel: hintCount + 1,
       });
 
       if (initialWasCorrect === null) {
@@ -180,7 +196,10 @@ export function StudentQuiz({
 
   const sendAnalysisEvent = async (retrySuccess: boolean) => {
     const event = {
-      participantToken: `student-${sessionId.slice(0, 8)}`,
+      // AnalysisEvent(Rust)の必須フィールド: id / submittedAt(秒)
+      id: crypto.randomUUID(),
+      participantToken:
+        participantToken ?? `student-${sessionId.slice(0, 8)}`,
       sessionId: null,
       questionID: question.id,
       concept: question.concept,
@@ -188,6 +207,7 @@ export function StudentQuiz({
       correct: initialWasCorrect ?? false,
       hintCount,
       retrySuccess,
+      submittedAt: Math.floor(Date.now() / 1000),
     };
 
     try {
