@@ -1,13 +1,13 @@
-import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
+import { useCallback, useEffect, useState } from "react";
 import {
   emptyState,
   errorMessage,
   modelManager,
-  progressFill,
   progressBar,
+  progressFill,
 } from "../styles/shared.css.ts";
 import {
   badge,
@@ -43,7 +43,9 @@ type ProgressMap = Record<string, DownloadProgress>;
 
 export function ModelManager() {
   const [models, setModels] = useState<ModelEntry[]>([]);
-  const [downloadingVariant, setDownloadingVariant] = useState<string | null>(null);
+  const [downloadingVariant, setDownloadingVariant] = useState<string | null>(
+    null,
+  );
   const [progress, setProgress] = useState<ProgressMap>({});
   const [error, setError] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
@@ -67,12 +69,15 @@ export function ModelManager() {
     let unlistenComplete: (() => void) | undefined;
 
     const setupListeners = async () => {
-      unlistenProgress = await listen<DownloadProgress>("download-progress", (event) => {
-        setProgress((prev) => {
-          const next = { ...prev, [event.payload.file]: event.payload };
-          return next;
-        });
-      });
+      unlistenProgress = await listen<DownloadProgress>(
+        "download-progress",
+        (event) => {
+          setProgress((prev) => {
+            const next = { ...prev, [event.payload.file]: event.payload };
+            return next;
+          });
+        },
+      );
 
       unlistenComplete = await listen<unknown>("download-complete", () => {
         setDownloadingVariant(null);
@@ -179,14 +184,16 @@ export function ModelManager() {
           </div>
 
           <div className={modelActions}>
-            {model.status === "available" && downloadingVariant !== model.variant && (
-              <button
-                onClick={() => handleDownload(model.variant)}
-                disabled={downloadingVariant != null}
-              >
-                ダウンロード
-              </button>
-            )}
+            {model.status === "available" &&
+              downloadingVariant !== model.variant && (
+                <button
+                  type="button"
+                  onClick={() => handleDownload(model.variant)}
+                  disabled={downloadingVariant != null}
+                >
+                  ダウンロード
+                </button>
+              )}
 
             {downloadingVariant === model.variant && (
               <>
@@ -197,7 +204,9 @@ export function ModelManager() {
                   />
                 </div>
                 <span>{overallPercent()}%</span>
-                <button onClick={handleCancel}>中止</button>
+                <button type="button" onClick={handleCancel}>
+                  中止
+                </button>
               </>
             )}
           </div>
@@ -207,9 +216,14 @@ export function ModelManager() {
       <div className={importSection}>
         <h3>手元のモデルを取り込む</h3>
         <p className={importHint}>
-          ローカルの .onnx と tokenizer.json のペアを選択してください。ファイルは検証された上で保存されます。
+          ローカルの .onnx と tokenizer.json
+          のペアを選択してください。ファイルは検証された上で保存されます。
         </p>
-        <button onClick={handleImport} disabled={importing || downloadingVariant != null}>
+        <button
+          type="button"
+          onClick={handleImport}
+          disabled={importing || downloadingVariant != null}
+        >
           {importing ? "取り込み中…" : "モデルを読み込む"}
         </button>
       </div>

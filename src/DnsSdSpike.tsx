@@ -1,6 +1,9 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import type {
+  AdvertiseHandle,
+  ServiceAnnouncement,
+} from "@momics/dns-sd-tauri";
 import { advertise, browse, close } from "@momics/dns-sd-tauri";
-import type { AdvertiseHandle, ServiceAnnouncement } from "@momics/dns-sd-tauri";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 type Mode = "idle" | "teacher" | "student";
 
@@ -24,7 +27,9 @@ export function DnsSdSpike() {
 
   const startTeacher = async () => {
     try {
-      log("Starting teacher mode — advertising _lumin-class._tcp on port 9876...");
+      log(
+        "Starting teacher mode — advertising _lumin-class._tcp on port 9876...",
+      );
       const handle = await advertise({
         service: {
           type: "lumin-class",
@@ -58,7 +63,9 @@ export function DnsSdSpike() {
             service: { type: "lumin-class", protocol: "tcp" },
             signal: controller.signal,
           })) {
-            log(`[${svc.kind}] ${svc.name} → ${svc.host ?? "?"}:${svc.port ?? "?"}`);
+            log(
+              `[${svc.kind}] ${svc.name} → ${svc.host ?? "?"}:${svc.port ?? "?"}`,
+            );
             if (svc.kind === "resolved" || svc.kind === "updated") {
               setDiscovered((prev) => {
                 const existing = prev.findIndex((p) => p.name === svc.name);
@@ -108,7 +115,8 @@ export function DnsSdSpike() {
   useEffect(() => {
     return () => {
       // Cleanup on unmount
-      if (advertiseHandle.current) advertiseHandle.current.stop().catch(() => {});
+      if (advertiseHandle.current)
+        advertiseHandle.current.stop().catch(() => {});
       if (browseAbort.current) browseAbort.current.abort();
       close().catch(() => {});
     };
@@ -117,16 +125,18 @@ export function DnsSdSpike() {
   return (
     <div style={{ padding: "2rem", fontFamily: "monospace", maxWidth: 800 }}>
       <h1>DNS-SD Discovery Spike</h1>
-      <p>Testing @momics/dns-sd-tauri — service discovery for Lumin classroom</p>
+      <p>
+        Testing @momics/dns-sd-tauri — service discovery for Lumin classroom
+      </p>
 
       <div style={{ display: "flex", gap: "1rem", marginBottom: "1rem" }}>
-        <button onClick={startTeacher} disabled={mode !== "idle"}>
+        <button type="button" onClick={startTeacher} disabled={mode !== "idle"}>
           Start Teacher (Advertise)
         </button>
-        <button onClick={startStudent} disabled={mode !== "idle"}>
+        <button type="button" onClick={startStudent} disabled={mode !== "idle"}>
           Start Student (Browse)
         </button>
-        <button onClick={stop} disabled={mode === "idle"}>
+        <button type="button" onClick={stop} disabled={mode === "idle"}>
           Stop All
         </button>
       </div>
@@ -140,20 +150,22 @@ export function DnsSdSpike() {
           <h3>Discovered Services ({discovered.length})</h3>
           <ul>
             {discovered.map((svc, i) => (
+              /* biome-ignore lint/suspicious/noArrayIndexKey: 同名サービスが衝突し得るため index を使用 */
               <li key={i}>
                 <strong>{svc.name}</strong> — {svc.host}:{svc.port}
                 {svc.txt && (
                   <span>
                     {" "}
-                    TXT: {JSON.stringify(
+                    TXT:{" "}
+                    {JSON.stringify(
                       Object.fromEntries(
                         Object.entries(svc.txt).map(([k, v]) => [
                           k,
                           v instanceof Uint8Array
                             ? new TextDecoder().decode(v)
                             : String(v),
-                        ])
-                      )
+                        ]),
+                      ),
                     )}
                   </span>
                 )}
@@ -177,6 +189,7 @@ export function DnsSdSpike() {
           }}
         >
           {logs.map((entry, i) => (
+            /* biome-ignore lint/suspicious/noArrayIndexKey: 追記のみのログリストでIDを持たないため */
             <div key={i}>
               [{entry.time}] {entry.message}
             </div>

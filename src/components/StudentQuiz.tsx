@@ -1,37 +1,37 @@
-import { useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { useCallback, useState } from "react";
 import { baseInputFocus } from "../styles/global.css.ts";
 import {
   errorMessage,
-  privacyNote,
   primaryButton,
-  secondaryButton,
-  progressFill,
+  privacyNote,
   progressBar,
-  questionPrompt,
+  progressFill,
   questionConcept,
+  questionPrompt,
   quizHeader,
+  secondaryButton,
 } from "../styles/shared.css.ts";
 import {
-  studentQuiz,
-  quizTitle,
-  quizProgress,
-  progressBarInQuiz,
-  questionCard,
   answerInput,
+  completionCard,
+  completionIcon,
+  completionMessage,
+  completionTitle,
   feedback as feedbackBase,
   feedbackCorrect,
   feedbackIncorrect,
+  hintActions,
   hintCard,
+  hintGuard,
   hintHeader,
   hintLabel,
-  hintGuard,
   hintText,
-  hintActions,
-  completionCard,
-  completionIcon,
-  completionTitle,
-  completionMessage,
+  progressBarInQuiz,
+  questionCard,
+  quizProgress,
+  quizTitle,
+  studentQuiz,
 } from "./StudentQuiz.css.ts";
 
 export interface QuizQuestion {
@@ -145,16 +145,16 @@ export function StudentQuiz({
   const [answer, setAnswer] = useState("");
   const [hintCount, setHintCount] = useState(0);
   const [feedback, setFeedback] = useState<"idle" | "correct" | "incorrect">(
-    "idle"
+    "idle",
   );
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isComplete, setIsComplete] = useState(false);
   const [generatedHint, setGeneratedHint] = useState<string | null>(null);
   const [initialWasCorrect, setInitialWasCorrect] = useState<boolean | null>(
-    null
+    null,
   );
   const [firstMisconception, setFirstMisconception] = useState<string | null>(
-    null
+    null,
   );
   const [error, setError] = useState<string | null>(null);
 
@@ -176,7 +176,7 @@ export function StudentQuiz({
         setGeneratedHint(null);
       }
     },
-    [question]
+    [question],
   );
 
   const handleSubmit = async () => {
@@ -231,8 +231,7 @@ export function StudentQuiz({
     const event = {
       // AnalysisEvent(Rust)の必須フィールド: id / submittedAt(秒)
       id: crypto.randomUUID(),
-      participantToken:
-        participantToken ?? `student-${sessionId.slice(0, 8)}`,
+      participantToken: participantToken ?? `student-${sessionId.slice(0, 8)}`,
       sessionId: null,
       questionID: question.id,
       concept: question.concept,
@@ -284,11 +283,7 @@ export function StudentQuiz({
             <br />
             先生には匿名の分析結果だけが共有されました。
           </p>
-          <button
-            className={primaryButton}
-            type="button"
-            onClick={onComplete}
-          >
+          <button className={primaryButton} type="button" onClick={onComplete}>
             参加画面へ戻る
           </button>
         </div>
@@ -309,7 +304,7 @@ export function StudentQuiz({
         <span className={quizProgress}>{progressLabel}</span>
       </div>
 
-      <div className={`${progressBar} ${progressBarInQuiz}`} aria-label="小テストの進捗">
+      <div className={`${progressBar} ${progressBarInQuiz}`} aria-hidden="true">
         <div
           className={progressFill}
           style={{
@@ -336,7 +331,9 @@ export function StudentQuiz({
         />
 
         {feedback === "correct" && (
-          <p className={`${feedbackBase} ${feedbackCorrect}`}>その考え方で正解です</p>
+          <p className={`${feedbackBase} ${feedbackCorrect}`}>
+            その考え方で正解です
+          </p>
         )}
         {feedback === "incorrect" && (
           <p className={`${feedbackBase} ${feedbackIncorrect}`}>

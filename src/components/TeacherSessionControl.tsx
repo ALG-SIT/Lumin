@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { useEffect, useState } from "react";
 import {
   emptyState,
   errorMessage,
@@ -19,12 +19,12 @@ import {
   questionList,
   questionListItem,
   questionNumber,
+  questionPromptInBody,
   quizCard,
   quizCardMeta,
   quizCardSelected,
   quizCardTitle,
   quizPicker,
-  questionPromptInBody,
   selectedQuizHeader,
   selectedQuizMeta,
   selectedQuizSubject,
@@ -166,7 +166,7 @@ export function TeacherSessionControl({
           <div className={sessionCard}>
             <div className={sessionCardHeader}>
               <div className={sessionIconBadge} aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="currentColor">
+                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                   <path d="M6 22q-.825 0-1.413-.588T4 20V4q0-.825.588-1.413T6 2h12q.825 0 1.413.588T20 4v16q0 .825-.588 1.413T18 22H6Zm0-2h12V4H6v16Zm2-2h8v-2H8v2Zm0-4h8v-2H8v2Zm0-4h5V8H8v2Z" />
                 </svg>
               </div>
@@ -225,9 +225,7 @@ export function TeacherSessionControl({
                   <span className={selectedQuizSubject}>
                     {selectedQuiz.subject}
                   </span>
-                  <h3 className={selectedQuizTitle}>
-                    {selectedQuiz.title}
-                  </h3>
+                  <h3 className={selectedQuizTitle}>{selectedQuiz.title}</h3>
                   <p className={selectedQuizMeta}>
                     {selectedQuiz.questions.length}問
                   </p>
@@ -239,8 +237,14 @@ export function TeacherSessionControl({
                   <li key={question.id} className={questionListItem}>
                     <span className={questionNumber}>{index + 1}</span>
                     <div className={questionBody}>
-                      <p className={`${questionPrompt} ${questionPromptInBody}`}>{question.prompt}</p>
-                      <span className={`${questionConcept} ${questionConceptInBody}`}>
+                      <p
+                        className={`${questionPrompt} ${questionPromptInBody}`}
+                      >
+                        {question.prompt}
+                      </p>
+                      <span
+                        className={`${questionConcept} ${questionConceptInBody}`}
+                      >
                         {question.concept}
                       </span>
                     </div>
