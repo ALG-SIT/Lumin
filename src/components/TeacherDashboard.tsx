@@ -6,6 +6,50 @@ import { TeacherSessionControl } from "./TeacherSessionControl";
 import { LessonPlanEditor } from "./LessonPlanEditor";
 import { TeacherChat } from "./TeacherChat";
 import type { Quiz } from "./StudentQuiz";
+import { joinCodeLabel, joinCodeValue, primaryButton, privacyNote, secondaryButton } from "../styles/shared.css.ts";
+import {
+  barCount,
+  barFill,
+  barLabel,
+  barMeta,
+  barRow,
+  barTrack,
+  card,
+  dashboardCard,
+  dashboardCardHeader,
+  dashboardCardSubtitle,
+  dashboardCardTitle,
+  dashboardEmpty,
+  demoActions,
+  joinCodeBanner,
+  joinCodeValueBanner,
+  metricCard,
+  metricGrid,
+  metricLabel,
+  metricNote,
+  metricValue,
+  signalBadge,
+  signalBadgeCorrect,
+  signalBadgeIncorrect,
+  signalBody,
+  signalCard,
+  signalConcept,
+  signalMisconception,
+  signalToken,
+  sidebarButton,
+  sidebarButtonActive,
+  teacherContent,
+  teacherDashboard,
+  teacherDashboardHeader,
+  teacherDashboardSubtitle,
+  teacherDashboardTitle,
+  teacherEmptyIcon,
+  teacherEmptyState,
+  teacherEmptyText,
+  teacherEmptyTitle,
+  teacherLayout,
+  teacherSidebar,
+} from "./TeacherDashboard.css.ts";
 
 export interface TeacherDashboardProps {
   onReset?: () => void;
@@ -112,13 +156,17 @@ export function TeacherDashboard({ onReset }: TeacherDashboardProps) {
   );
 
   return (
-    <section className="teacher-layout" aria-label="先生ダッシュボード">
-      <nav className="teacher-sidebar" aria-label="教師ナビゲーション">
+    <section className={teacherLayout} aria-label="先生ダッシュボード">
+      <nav className={teacherSidebar} aria-label="教師ナビゲーション">
         {TABS.map((t) => (
           <button
             key={t.id}
             type="button"
-            className={tab === t.id ? "active" : ""}
+            className={
+              tab === t.id
+                ? `${sidebarButton} ${sidebarButtonActive}`
+                : sidebarButton
+            }
             onClick={() => setTab(t.id)}
             aria-current={tab === t.id ? "page" : undefined}
           >
@@ -126,44 +174,44 @@ export function TeacherDashboard({ onReset }: TeacherDashboardProps) {
           </button>
         ))}
         {onReset && (
-          <button type="button" onClick={onReset}>
+          <button type="button" className={sidebarButton} onClick={onReset}>
             役割を切り替える
           </button>
         )}
       </nav>
 
-      <div className="teacher-content">
+      <div className={teacherContent}>
         {/* 参加コード常時表示(セッション有効中・全タブ共通) */}
         {sessionCode && (
-          <div className="join-code-banner" role="status" aria-live="polite">
-            <span className="join-code-label">参加コード</span>
-            <strong className="join-code-value">{sessionCode}</strong>
+          <div className={joinCodeBanner} role="status" aria-live="polite">
+            <span className={joinCodeLabel}>参加コード</span>
+            <strong className={`${joinCodeValue} ${joinCodeValueBanner}`}>{sessionCode}</strong>
           </div>
         )}
 
         {tab === "dashboard" && (
-          <div className="teacher-dashboard">
-            <div className="teacher-dashboard-header">
+          <div className={teacherDashboard}>
+            <div className={teacherDashboardHeader}>
               <div>
-                <h2 className="teacher-dashboard-title">クラスの概要</h2>
-                <p className="teacher-dashboard-subtitle">
+                <h2 className={teacherDashboardTitle}>クラスの概要</h2>
+                <p className={teacherDashboardSubtitle}>
                   正答率ではなく、なぜ迷ったかを見ます。
                 </p>
               </div>
             </div>
 
             {!hasData ? (
-              <div className="teacher-empty-state">
-          <div className="teacher-empty-icon" aria-hidden>
+              <div className={teacherEmptyState}>
+          <div className={teacherEmptyIcon} aria-hidden>
             ☀
           </div>
-          <h3 className="teacher-empty-title">回答を待っています</h3>
-          <p className="teacher-empty-text">
+          <h3 className={teacherEmptyTitle}>回答を待っています</h3>
+          <p className={teacherEmptyText}>
             生徒が回答すると、解答本文を含まない分析結果だけがここに届きます。
           </p>
           <button
             type="button"
-            className="primary-button"
+            className={primaryButton}
             onClick={loadDemoData}
             disabled={isLoadingDemo}
           >
@@ -172,64 +220,64 @@ export function TeacherDashboard({ onReset }: TeacherDashboardProps) {
         </div>
       ) : (
         <>
-          <div className="metric-grid">
-            <div className="metric-card">
-              <span className="metric-value">
+          <div className={metricGrid}>
+            <div className={metricCard}>
+              <span className={metricValue}>
                 {summary?.participantCount ?? 0}
               </span>
-              <span className="metric-label">参加者数</span>
-              <span className="metric-note">匿名トークン</span>
+              <span className={metricLabel}>参加者数</span>
+              <span className={metricNote}>匿名トークン</span>
             </div>
-            <div className="metric-card">
-              <span className="metric-value">
+            <div className={metricCard}>
+              <span className={metricValue}>
                 {((summary?.correctRate ?? 0) * 100).toFixed(0)}%
               </span>
-              <span className="metric-label">初回正解率</span>
-              <span className="metric-note">
+              <span className={metricLabel}>初回正解率</span>
+              <span className={metricNote}>
                 全{summary?.responseCount ?? 0}回答
               </span>
             </div>
-            <div className="metric-card">
-              <span className="metric-value">
+            <div className={metricCard}>
+              <span className={metricValue}>
                 {((summary?.retrySuccessRate ?? 0) * 100).toFixed(0)}%
               </span>
-              <span className="metric-label">リトライ成功率</span>
-              <span className="metric-note">ヒント利用後</span>
+              <span className={metricLabel}>リトライ成功率</span>
+              <span className={metricNote}>ヒント利用後</span>
             </div>
-            <div className="metric-card">
-              <span className="metric-value">
+            <div className={metricCard}>
+              <span className={metricValue}>
                 {(summary?.averageHints ?? 0).toFixed(1)}
               </span>
-              <span className="metric-label">平均ヒント数</span>
-              <span className="metric-note">1回答あたり</span>
+              <span className={metricLabel}>平均ヒント数</span>
+              <span className={metricNote}>1回答あたり</span>
             </div>
           </div>
 
-          <div className="dashboard-card misconception-bars">
-            <div className="dashboard-card-header">
+          <div className={`${dashboardCard} misconception-bars`}>
+            <div className={dashboardCardHeader}>
               <div>
-                <h3 className="dashboard-card-title">よくある誤概念 TOP 5</h3>
-                <p className="dashboard-card-subtitle">
+                <h3 className={dashboardCardTitle}>よくある誤概念 TOP 5</h3>
+                <p className={dashboardCardSubtitle}>
                   受信した最小化データから集計
                 </p>
               </div>
             </div>
             {(summary?.misconceptions ?? []).length === 0 ? (
-              <p className="dashboard-empty">まだ誤概念の集計がありません</p>
+              <p className={dashboardEmpty}>まだ誤概念の集計がありません</p>
             ) : (
               (summary?.misconceptions ?? [])
                 .slice(0, 5)
                 .map((m, i) => (
-                  <div key={m.name} className="bar-row">
-                    <div className="bar-meta">
-                      <span className="bar-label">{m.name}</span>
-                      <span className="bar-count">
+                  <div key={m.name} className={barRow}>
+                    <div className={barMeta}>
+                      <span className={barLabel}>{m.name}</span>
+                      <span className={barCount}>
                         {m.count}件 · {(m.share * 100).toFixed(0)}%
                       </span>
                     </div>
-                    <div className="bar-track">
+                    <div className={barTrack}>
                       <div
-                        className="bar-fill"
+                        className={barFill}
                         style={{
                           width: `${(m.count / maxMisconceptionCount) * 100}%`,
                           backgroundColor:
@@ -242,44 +290,44 @@ export function TeacherDashboard({ onReset }: TeacherDashboardProps) {
             )}
           </div>
 
-          <div className="dashboard-card recent-signals">
-            <h3 className="dashboard-card-title">最近のシグナル</h3>
+          <div className={`${dashboardCard} recent-signals`}>
+            <h3 className={dashboardCardTitle}>最近のシグナル</h3>
             {events.length === 0 ? (
-              <p className="dashboard-empty">まだ信号がありません</p>
+              <p className={dashboardEmpty}>まだ信号がありません</p>
             ) : (
               events
                 .slice(-10)
                 .reverse()
                 .map((e) => (
-                  <div key={e.id} className="signal-card">
+                  <div key={e.id} className={signalCard}>
                     <span
-                      className={`signal-badge ${e.correct ? "correct" : "incorrect"}`}
+                      className={`${signalBadge} ${e.correct ? signalBadgeCorrect : signalBadgeIncorrect}`}
                       aria-label={e.correct ? "正解" : "不正解"}
                     >
                       {e.correct ? "✓" : "✗"}
                     </span>
-                    <div className="signal-body">
-                      <span className="signal-concept">{e.concept}</span>
-                      <span className="signal-misconception">
+                    <div className={signalBody}>
+                      <span className={signalConcept}>{e.concept}</span>
+                      <span className={signalMisconception}>
                         {e.misconception ?? "初回で理解"}
                       </span>
                     </div>
-                    <span className="signal-token">{e.participantToken}</span>
+                    <span className={signalToken}>{e.participantToken}</span>
                   </div>
                 ))
             )}
           </div>
 
-          <div className="demo-actions">
+          <div className={demoActions}>
             <button
               type="button"
-              className="secondary-button"
+              className={secondaryButton}
               onClick={loadDemoData}
               disabled={isLoadingDemo}
             >
               {isLoadingDemo ? "読み込み中…" : "大会デモ用データを読み込む"}
             </button>
-            <p className="privacy-note">
+            <p className={privacyNote}>
               生徒の解答本文や氏名は表示・保存されません
             </p>
           </div>
@@ -313,7 +361,7 @@ export function TeacherDashboard({ onReset }: TeacherDashboardProps) {
           />
         )}
         {tab === "lesson" && !summary && (
-          <div className="card">
+          <div className={card}>
             <p style={{ color: "var(--lumin-text-secondary)" }}>
               クラスのデータが集まるまでレッスンプランは作成できません。
             </p>
