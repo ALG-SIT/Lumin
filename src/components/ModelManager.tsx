@@ -2,6 +2,23 @@ import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
+import {
+  emptyState,
+  errorMessage,
+  modelManager,
+  progressFill,
+  progressBar,
+} from "../styles/shared.css.ts";
+import {
+  badge,
+  importHint,
+  importSection,
+  modelActions,
+  modelCard,
+  modelMeta,
+  modelName,
+  statusBadge,
+} from "./ModelManager.css.ts";
 
 interface ModelEntry {
   id: string;
@@ -138,30 +155,30 @@ export function ModelManager() {
   };
 
   return (
-    <div className="model-manager">
+    <div className={modelManager}>
       <h2>モデル管理</h2>
 
       {models.length === 0 && (
-        <div className="empty-state">モデル情報を取得中…</div>
+        <div className={emptyState}>モデル情報を取得中…</div>
       )}
 
       {models.map((model) => (
-        <div key={model.id} className="model-card">
-          <div className="model-name">
+        <div key={model.id} className={modelCard}>
+          <div className={modelName}>
             {model.name}
-            {model.recommended && <span className="badge">推奨</span>}
+            {model.recommended && <span className={badge}>推奨</span>}
           </div>
 
-          <div className="model-meta">
+          <div className={modelMeta}>
             <span>{formatBytes(model.size_bytes)}</span>
             {model.status === "installed" ? (
-              <span className="status-badge">✓ 導入済み</span>
+              <span className={statusBadge}>✓ 導入済み</span>
             ) : (
               <span>未導入</span>
             )}
           </div>
 
-          <div className="model-actions">
+          <div className={modelActions}>
             {model.status === "available" && downloadingVariant !== model.variant && (
               <button
                 onClick={() => handleDownload(model.variant)}
@@ -173,9 +190,9 @@ export function ModelManager() {
 
             {downloadingVariant === model.variant && (
               <>
-                <div className="progress-bar">
+                <div className={progressBar}>
                   <div
-                    className="progress-fill"
+                    className={progressFill}
                     style={{ width: `${overallPercent()}%` }}
                   />
                 </div>
@@ -187,9 +204,9 @@ export function ModelManager() {
         </div>
       ))}
 
-      <div className="import-section">
+      <div className={importSection}>
         <h3>手元のモデルを取り込む</h3>
-        <p className="import-hint">
+        <p className={importHint}>
           ローカルの .onnx と tokenizer.json のペアを選択してください。ファイルは検証された上で保存されます。
         </p>
         <button onClick={handleImport} disabled={importing || downloadingVariant != null}>
@@ -197,7 +214,7 @@ export function ModelManager() {
         </button>
       </div>
 
-      {error && <div className="error-message">{error}</div>}
+      {error && <div className={errorMessage}>{error}</div>}
     </div>
   );
 }

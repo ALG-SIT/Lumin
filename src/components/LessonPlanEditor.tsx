@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { baseInputFocus } from "../styles/global.css.ts";
+import { errorMessage, primaryButton, secondaryButton } from "../styles/shared.css.ts";
+import { manualInput } from "./LessonPlanEditor.css.ts";
 
 export interface MisconceptionSummary {
   concept: string;
@@ -100,7 +103,7 @@ export function LessonPlanEditor({ classSummary, onAdopted }: LessonPlanEditorPr
           type="button"
           onClick={regenerate}
           disabled={loading}
-          className="secondary-button"
+          className={secondaryButton}
         >
           {loading ? "AIが生成中…" : "オンデバイスAIで再生成"}
         </button>
@@ -111,7 +114,7 @@ export function LessonPlanEditor({ classSummary, onAdopted }: LessonPlanEditorPr
           <label htmlFor="lesson-focus">学習の焦点</label>
           <input
             id="lesson-focus"
-            className="manual-input"
+            className={`${manualInput} ${baseInputFocus}`}
             value={plan.focus}
             onChange={(e) => setPlan((p) => ({ ...p, focus: e.target.value }))}
             placeholder="この授業の主な目標は？"
@@ -122,7 +125,7 @@ export function LessonPlanEditor({ classSummary, onAdopted }: LessonPlanEditorPr
           <label htmlFor="teacher-note">教師メモ</label>
           <textarea
             id="teacher-note"
-            className="manual-input lesson-textarea"
+            className={`${manualInput} ${baseInputFocus} lesson-textarea`}
             value={plan.teacherNote}
             onChange={(e) =>
               setPlan((p) => ({ ...p, teacherNote: e.target.value }))
@@ -138,7 +141,7 @@ export function LessonPlanEditor({ classSummary, onAdopted }: LessonPlanEditorPr
               <label htmlFor={`step-${i}`}>段階 {i + 1}</label>
               <textarea
                 id={`step-${i}`}
-                className="manual-input lesson-textarea"
+                className={`${manualInput} ${baseInputFocus} lesson-textarea`}
                 value={step}
                 onChange={(e) => updateStep(i, e.target.value)}
                 placeholder={`段階${i + 1}の説明`}
@@ -153,7 +156,7 @@ export function LessonPlanEditor({ classSummary, onAdopted }: LessonPlanEditorPr
           <label htmlFor="check-question">確認質問</label>
           <input
             id="check-question"
-            className="manual-input"
+            className={`${manualInput} ${baseInputFocus}`}
             value={plan.checkQuestion}
             onChange={(e) =>
               setPlan((p) => ({ ...p, checkQuestion: e.target.value }))
@@ -163,14 +166,14 @@ export function LessonPlanEditor({ classSummary, onAdopted }: LessonPlanEditorPr
         </div>
       </div>
 
-      {error && <p className="error-message">{error}</p>}
+      {error && <p className={errorMessage}>{error}</p>}
 
       <div className="lesson-plan-actions">
         <button
           type="button"
           onClick={regenerate}
           disabled={loading}
-          className="secondary-button"
+          className={secondaryButton}
         >
           {loading ? "生成中…" : "AIで再生成"}
         </button>
@@ -178,7 +181,7 @@ export function LessonPlanEditor({ classSummary, onAdopted }: LessonPlanEditorPr
           type="button"
           onClick={adopt}
           disabled={loading}
-          className="primary-button"
+          className={primaryButton}
         >
           この案を採用
         </button>

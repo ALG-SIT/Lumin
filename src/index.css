@@ -249,90 +249,7 @@ h1 {
   margin-bottom: 1em;
 }
 
-/* Model manager */
-.model-manager {
-  padding: var(--space-6);
-  max-width: 720px;
-  margin: 0 auto;
-}
-
-.model-manager h2 {
-  margin: 0 0 var(--space-5) 0;
-  font-size: 1.5rem;
-  color: var(--color-ink);
-}
-
-.model-card {
-  display: grid;
-  grid-template-columns: 1fr auto auto;
-  align-items: center;
-  gap: var(--space-4);
-  padding: var(--space-5);
-  margin-bottom: var(--space-4);
-  background: var(--color-paper);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
-}
-
-.model-card .model-name {
-  font-weight: 600;
-  color: var(--color-ink);
-}
-
-.model-card .model-meta {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: var(--space-1);
-  color: var(--color-muted);
-  font-size: 0.875rem;
-}
-
-.badge {
-  display: inline-block;
-  padding: var(--space-1) var(--space-2);
-  border-radius: 9999px;
-  background: var(--lumin-purple-soft);
-  color: var(--lumin-purple);
-  font-size: 0.75rem;
-  font-weight: 700;
-}
-
-.status-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  color: var(--color-success);
-  font-size: 0.875rem;
-  font-weight: 600;
-}
-
-.model-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-}
-
-.model-actions button {
-  background: var(--lumin-indigo);
-  color: white;
-  border: none;
-  padding: 8px 14px;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  font-weight: 600;
-  transition: background 0.2s ease;
-}
-
-.model-actions button:hover:not(:disabled) {
-  background: #4338ca;
-}
-
-.model-actions button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
+/* Model manager progress (shared with StudentQuiz literals until T8) */
 .progress-bar {
   width: 160px;
   height: 8px;
@@ -347,43 +264,6 @@ h1 {
   transition: width 0.2s ease;
 }
 
-.import-section {
-  margin-top: var(--space-6);
-  padding-top: var(--space-5);
-  border-top: 1px solid #e5e7eb;
-}
-
-.import-section h3 {
-  margin: 0 0 var(--space-3) 0;
-  font-size: 1.125rem;
-}
-
-.import-section button {
-  background: var(--lumin-purple);
-  color: white;
-  border: none;
-  padding: 10px 18px;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  font-weight: 600;
-  transition: background 0.2s ease;
-}
-
-.import-section button:hover:not(:disabled) {
-  background: var(--lumin-purple-dark);
-}
-
-.import-section button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.import-hint {
-  color: var(--color-muted);
-  font-size: 0.875rem;
-  margin-bottom: var(--space-3);
-}
-
 .error-message {
   margin-top: var(--space-4);
   padding: var(--space-3) var(--space-4);
@@ -391,12 +271,6 @@ h1 {
   color: var(--lumin-error);
   border-radius: var(--radius-md);
   font-size: 0.875rem;
-}
-
-.empty-state {
-  color: var(--color-muted);
-  padding: var(--space-6);
-  text-align: center;
 }
 
 /* Student join */
