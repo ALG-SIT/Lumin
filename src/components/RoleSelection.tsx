@@ -59,19 +59,19 @@ function ArrowRightIcon(props: React.SVGProps<SVGSVGElement>) {
 }
 
 interface RoleCardProps {
-  role: LuminRole;
+  userRole: LuminRole;
   title: string;
   detail: string;
   icon: React.ReactNode;
   onSelect: (role: LuminRole) => void;
 }
 
-function RoleCard({ role, title, detail, icon, onSelect }: RoleCardProps) {
+function RoleCard({ userRole, title, detail, icon, onSelect }: RoleCardProps) {
   return (
     <button
       type="button"
       className={roleButton}
-      onClick={() => onSelect(role)}
+      onClick={() => onSelect(userRole)}
       aria-label={`${title}画面を開く`}
     >
       <span className={roleIcon}>{icon}</span>
@@ -93,23 +93,24 @@ export function RoleSelection({ onSelect }: RoleSelectionProps) {
         Lumin
       </h1>
       <p className={tagline}>理解を照らし、次の学びにつなげる</p>
+      {/* biome-ignore lint/a11y/useSemanticElements: role="group" は意図的なボタングループ（fieldset は legend と CSS リセットを要求するため不使用） */}
       <div className={roleButtons} role="group" aria-label="役割選択">
         <RoleCard
-          role="teacher"
+          userRole="teacher"
           title="先生として始める"
           detail="小テストを配信し、クラスのつまずきから次の10分を組み立てます。"
           icon={<TeacherIcon />}
           onSelect={onSelect}
         />
         <RoleCard
-          role="student"
+          userRole="student"
           title="生徒として参加"
           detail="自分のペースで解き、正解を見る前に段階的なヒントを受け取ります。"
           icon={<StudentIcon />}
           onSelect={onSelect}
         />
         <RoleCard
-          role="demo"
+          userRole="demo"
           title="デモとして試す"
           detail="サンプルの問題でLuminの動作を体験できます。"
           icon={<DemoIcon />}
