@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { Quiz } from "./StudentQuiz";
+import { useEffect, useRef, useState } from "react";
 import { baseInputFocus } from "../styles/global.css.ts";
+import type { Quiz } from "./StudentQuiz";
 import {
   messageAssistant,
   messageUser,
@@ -88,6 +88,7 @@ export function TeacherChat({ classSummary, activeQuiz }: TeacherChatProps) {
   const [error, setError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: メッセージ更新時に最下部へスクロールさせる意図的なトリガー
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
@@ -135,7 +136,9 @@ export function TeacherChat({ classSummary, activeQuiz }: TeacherChatProps) {
       <header className={teacherChatHeader}>
         <div>
           <h2>AI 先生方へ質問</h2>
-          <p>現在の小テストと匿名集計を文脈にして、オンデバイスAIが回答します。</p>
+          <p>
+            現在の小テストと匿名集計を文脈にして、オンデバイスAIが回答します。
+          </p>
         </div>
         <span className={teacherChatPrivacy}>
           <LockIcon style={{ width: 16, height: 16, flexShrink: 0 }} />
@@ -143,7 +146,12 @@ export function TeacherChat({ classSummary, activeQuiz }: TeacherChatProps) {
         </span>
       </header>
 
-      <div className={teacherChatHistory} role="log" aria-live="polite" aria-label="会話履歴">
+      <div
+        className={teacherChatHistory}
+        role="log"
+        aria-live="polite"
+        aria-label="会話履歴"
+      >
         {messages.length === 0 && (
           <div className={teacherChatWelcome}>
             <h3>何を相談しますか？</h3>
@@ -157,6 +165,7 @@ export function TeacherChat({ classSummary, activeQuiz }: TeacherChatProps) {
 
         {messages.map((msg, index) => (
           <div
+            /* biome-ignore lint/suspicious/noArrayIndexKey: メッセージは追記のみでIDを持たないため */
             key={index}
             className={`${teacherChatMessage} ${msg.role === "user" ? messageUser : messageAssistant}`}
           >
@@ -181,6 +190,7 @@ export function TeacherChat({ classSummary, activeQuiz }: TeacherChatProps) {
       <div className={teacherChatSuggestions}>
         {SUGGESTIONS.map((suggestion, index) => (
           <button
+            /* biome-ignore lint/suspicious/noArrayIndexKey: 静的な候補リストのため */
             key={index}
             type="button"
             className={teacherChatChip}

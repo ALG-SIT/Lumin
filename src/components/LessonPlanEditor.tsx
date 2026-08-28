@@ -1,7 +1,11 @@
-import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { useEffect, useState } from "react";
 import { baseInputFocus } from "../styles/global.css.ts";
-import { errorMessage, primaryButton, secondaryButton } from "../styles/shared.css.ts";
+import {
+  errorMessage,
+  primaryButton,
+  secondaryButton,
+} from "../styles/shared.css.ts";
 import { manualInput } from "./LessonPlanEditor.css.ts";
 
 export interface MisconceptionSummary {
@@ -30,7 +34,10 @@ export interface LessonPlanEditorProps {
   onAdopted: (plan: LessonPlan) => void;
 }
 
-export function LessonPlanEditor({ classSummary, onAdopted }: LessonPlanEditorProps) {
+export function LessonPlanEditor({
+  classSummary,
+  onAdopted,
+}: LessonPlanEditorProps) {
   const [plan, setPlan] = useState<LessonPlan>({
     focus: "",
     steps: ["", "", "", ""],
@@ -41,6 +48,7 @@ export function LessonPlanEditor({ classSummary, onAdopted }: LessonPlanEditorPr
   const [error, setError] = useState<string | null>(null);
 
   // 初期テンプレートを生成(UIブロックなし・静かに行う/main実装同等)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: マウント時の1回だけ初期生成する意図。classSummary を依存に加えると編集中の plan が上書きされる
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -137,6 +145,7 @@ export function LessonPlanEditor({ classSummary, onAdopted }: LessonPlanEditorPr
         <div className="steps-section">
           <h3>授業の展開（4段階）</h3>
           {plan.steps.map((step, i) => (
+            /* biome-ignore lint/suspicious/noArrayIndexKey: steps[i] を textarea の値と位置で対応させるため */
             <div key={i} className="step-field">
               <label htmlFor={`step-${i}`}>段階 {i + 1}</label>
               <textarea

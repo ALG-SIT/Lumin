@@ -1,32 +1,32 @@
-import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { useState } from "react";
 import { isTauriEnvironment } from "../lib/tauri";
 import { resetButton } from "../styles/shared.css.ts";
 import {
-  demoFlow,
-  demoSubtitle,
-  demoIntro,
-  demoStartButton,
+  demoComplete,
   demoError,
+  demoFlow,
+  demoIntro,
+  demoLessonPlan,
+  demoMisconceptions,
+  demoPlanCheck,
+  demoPlanFocus,
+  demoPlanNote,
+  demoPlanSteps,
   demoProgress,
+  demoStartButton,
+  demoStat,
+  demoStatLabel,
+  demoStats,
+  demoStatValue,
   demoStep,
   demoStepActive,
+  demoStepDetail,
   demoStepDone,
   demoStepIndicator,
   demoStepText,
-  demoStepDetail,
+  demoSubtitle,
   demoSummary,
-  demoLessonPlan,
-  demoStats,
-  demoStat,
-  demoStatLabel,
-  demoStatValue,
-  demoMisconceptions,
-  demoPlanFocus,
-  demoPlanSteps,
-  demoPlanCheck,
-  demoPlanNote,
-  demoComplete,
 } from "./DemoFlow.css.ts";
 
 export interface DemoFlowProps {
@@ -76,7 +76,7 @@ export function DemoFlow({ onReset }: DemoFlowProps) {
     setError(null);
     if (!isTauriEnvironment()) {
       setError(
-        "Luminデスクトップアプリから実行してください(ターミナルで bun run tauri dev)"
+        "Luminデスクトップアプリから実行してください(ターミナルで bun run tauri dev)",
       );
       return;
     }
@@ -126,18 +126,13 @@ export function DemoFlow({ onReset }: DemoFlowProps) {
       {currentStep === -1 && (
         <div className={demoIntro}>
           {isTauriEnvironment() ? (
-            <button
-              type="button"
-              className={demoStartButton}
-              onClick={runDemo}
-            >
+            <button type="button" className={demoStartButton} onClick={runDemo}>
               デモを始める
             </button>
           ) : (
             <p className={demoError} role="status">
               このデモはLuminデスクトップアプリでのみ実行できます。
-              ブラウザプレビューでは動作しません。
-              ターミナルで
+              ブラウザプレビューでは動作しません。 ターミナルで
               <code> bun run tauri dev </code>
               を実行して起動してください。
             </p>
@@ -159,11 +154,16 @@ export function DemoFlow({ onReset }: DemoFlowProps) {
         <div className={demoProgress}>
           {DEMO_STEPS.map((step, i) => (
             <div
+              /* biome-ignore lint/suspicious/noArrayIndexKey: 静的な手順リストであり位置が意味を持つため */
               key={i}
               className={`${demoStep} ${i === currentStep ? demoStepActive : ""} ${i < currentStep ? demoStepDone : ""} ${i > currentStep ? "pending" : ""}`}
             >
               <span className={demoStepIndicator}>
-                {i < currentStep ? "\u2713" : i === currentStep ? "\u25cf" : "\u25cb"}
+                {i < currentStep
+                  ? "\u2713"
+                  : i === currentStep
+                    ? "\u25cf"
+                    : "\u25cb"}
               </span>
               <div className={demoStepText}>
                 <strong>{step.label}</strong>
@@ -182,7 +182,9 @@ export function DemoFlow({ onReset }: DemoFlowProps) {
           <div className={demoStats}>
             <div className={demoStat}>
               <span className={demoStatLabel}>参加者</span>
-              <span className={demoStatValue}>{summary.participantCount}名</span>
+              <span className={demoStatValue}>
+                {summary.participantCount}名
+              </span>
             </div>
             <div className={demoStat}>
               <span className={demoStatLabel}>回答数</span>
@@ -230,6 +232,7 @@ export function DemoFlow({ onReset }: DemoFlowProps) {
           </div>
           <ol className={demoPlanSteps}>
             {lessonPlan.steps.map((s, i) => (
+              /* biome-ignore lint/suspicious/noArrayIndexKey: 静的な手順リストであり位置が意味を持つため */
               <li key={i}>{s}</li>
             ))}
           </ol>
