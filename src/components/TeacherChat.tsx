@@ -1,6 +1,28 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { Quiz } from "./StudentQuiz";
+import { baseInputFocus } from "../styles/global.css.ts";
+import {
+  messageAssistant,
+  messageUser,
+  teacherChat,
+  teacherChatBubble,
+  teacherChatChip,
+  teacherChatComposer,
+  teacherChatError,
+  teacherChatFooterNote,
+  teacherChatHeader,
+  teacherChatHistory,
+  teacherChatInput,
+  teacherChatInputRow,
+  teacherChatMessage,
+  teacherChatMessageRole,
+  teacherChatPrivacy,
+  teacherChatSend,
+  teacherChatSuggestions,
+  teacherChatThinking,
+  teacherChatWelcome,
+} from "./TeacherChat.css.ts";
 
 export interface MisconceptionSummary {
   name: string;
@@ -109,21 +131,21 @@ export function TeacherChat({ classSummary, activeQuiz }: TeacherChatProps) {
   const canSend = input.trim().length > 0 && !loading;
 
   return (
-    <section className="teacher-chat" aria-label="AIと対話">
-      <header className="teacher-chat-header">
+    <section className={teacherChat} aria-label="AIと対話">
+      <header className={teacherChatHeader}>
         <div>
           <h2>AI 先生方へ質問</h2>
           <p>現在の小テストと匿名集計を文脈にして、オンデバイスAIが回答します。</p>
         </div>
-        <span className="teacher-chat-privacy">
+        <span className={teacherChatPrivacy}>
           <LockIcon style={{ width: 16, height: 16, flexShrink: 0 }} />
           個別の解答本文や氏名はAIへ渡しません
         </span>
       </header>
 
-      <div className="teacher-chat-history" role="log" aria-live="polite" aria-label="会話履歴">
+      <div className={teacherChatHistory} role="log" aria-live="polite" aria-label="会話履歴">
         {messages.length === 0 && (
-          <div className="teacher-chat-welcome">
+          <div className={teacherChatWelcome}>
             <h3>何を相談しますか？</h3>
             <p>
               {classSummary && classSummary.responseCount > 0
@@ -134,31 +156,34 @@ export function TeacherChat({ classSummary, activeQuiz }: TeacherChatProps) {
         )}
 
         {messages.map((msg, index) => (
-          <div key={index} className={`teacher-chat-message ${msg.role}`}>
-            <span className="teacher-chat-message-role">
+          <div
+            key={index}
+            className={`${teacherChatMessage} ${msg.role === "user" ? messageUser : messageAssistant}`}
+          >
+            <span className={teacherChatMessageRole}>
               {msg.role === "user" ? "先生" : "AI"}
             </span>
-            <p className="teacher-chat-bubble">{msg.content}</p>
+            <p className={teacherChatBubble}>{msg.content}</p>
           </div>
         ))}
 
         {loading && (
-          <div className="teacher-chat-message assistant">
-            <span className="teacher-chat-message-role">AI</span>
-            <div className="teacher-chat-bubble">
-              <span className="teacher-chat-thinking">考え中…</span>
+          <div className={`${teacherChatMessage} ${messageAssistant}`}>
+            <span className={teacherChatMessageRole}>AI</span>
+            <div className={teacherChatBubble}>
+              <span className={teacherChatThinking}>考え中…</span>
             </div>
           </div>
         )}
         <div ref={bottomRef} />
       </div>
 
-      <div className="teacher-chat-suggestions">
+      <div className={teacherChatSuggestions}>
         {SUGGESTIONS.map((suggestion, index) => (
           <button
             key={index}
             type="button"
-            className="teacher-chat-chip"
+            className={teacherChatChip}
             onClick={() => send(suggestion)}
             disabled={loading}
           >
@@ -167,11 +192,11 @@ export function TeacherChat({ classSummary, activeQuiz }: TeacherChatProps) {
         ))}
       </div>
 
-      <div className="teacher-chat-composer">
-        {error && <p className="teacher-chat-error">{error}</p>}
-        <div className="teacher-chat-input-row">
+      <div className={teacherChatComposer}>
+        {error && <p className={teacherChatError}>{error}</p>}
+        <div className={teacherChatInputRow}>
           <textarea
-            className="teacher-chat-input"
+            className={`${teacherChatInput} ${baseInputFocus}`}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
@@ -186,7 +211,7 @@ export function TeacherChat({ classSummary, activeQuiz }: TeacherChatProps) {
           />
           <button
             type="button"
-            className="teacher-chat-send"
+            className={teacherChatSend}
             onClick={() => send(input)}
             disabled={!canSend}
             aria-label="質問を送信"
@@ -194,7 +219,7 @@ export function TeacherChat({ classSummary, activeQuiz }: TeacherChatProps) {
             <SendIcon />
           </button>
         </div>
-        <p className="teacher-chat-footer-note">
+        <p className={teacherChatFooterNote}>
           個別の解答本文や氏名はAIへ渡しません。提案は先生が確認して利用してください。
         </p>
       </div>
