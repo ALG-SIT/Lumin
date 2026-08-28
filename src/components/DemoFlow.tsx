@@ -1,6 +1,33 @@
 import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { isTauriEnvironment } from "../lib/tauri";
+import { resetButton } from "../styles/shared.css.ts";
+import {
+  demoFlow,
+  demoSubtitle,
+  demoIntro,
+  demoStartButton,
+  demoError,
+  demoProgress,
+  demoStep,
+  demoStepActive,
+  demoStepDone,
+  demoStepIndicator,
+  demoStepText,
+  demoStepDetail,
+  demoSummary,
+  demoLessonPlan,
+  demoStats,
+  demoStat,
+  demoStatLabel,
+  demoStatValue,
+  demoMisconceptions,
+  demoPlanFocus,
+  demoPlanSteps,
+  demoPlanCheck,
+  demoPlanNote,
+  demoComplete,
+} from "./DemoFlow.css.ts";
 
 export interface DemoFlowProps {
   onReset?: () => void;
@@ -90,24 +117,24 @@ export function DemoFlow({ onReset }: DemoFlowProps) {
   };
 
   return (
-    <section className="demo-flow" aria-label="3分デモ">
+    <section className={demoFlow} aria-label="3分デモ">
       <h2>3分間デモ</h2>
-      <p className="demo-subtitle">
+      <p className={demoSubtitle}>
         Luminの全フローを体験できます（実際のネットワーク・AI推論は使用しません）
       </p>
 
       {currentStep === -1 && (
-        <div className="demo-intro">
+        <div className={demoIntro}>
           {isTauriEnvironment() ? (
             <button
               type="button"
-              className="demo-start-button"
+              className={demoStartButton}
               onClick={runDemo}
             >
               デモを始める
             </button>
           ) : (
-            <p className="demo-error" role="status">
+            <p className={demoError} role="status">
               このデモはLuminデスクトップアプリでのみ実行できます。
               ブラウザプレビューでは動作しません。
               ターミナルで
@@ -118,7 +145,7 @@ export function DemoFlow({ onReset }: DemoFlowProps) {
           {onReset && (
             <button
               type="button"
-              className="reset-button"
+              className={resetButton}
               onClick={onReset}
               style={{ marginTop: "0.75rem" }}
             >
@@ -129,19 +156,19 @@ export function DemoFlow({ onReset }: DemoFlowProps) {
       )}
 
       {currentStep >= 0 && (
-        <div className="demo-progress">
+        <div className={demoProgress}>
           {DEMO_STEPS.map((step, i) => (
             <div
               key={i}
-              className={`demo-step ${i === currentStep ? "active" : ""} ${i < currentStep ? "done" : ""} ${i > currentStep ? "pending" : ""}`}
+              className={`${demoStep} ${i === currentStep ? demoStepActive : ""} ${i < currentStep ? demoStepDone : ""} ${i > currentStep ? "pending" : ""}`}
             >
-              <span className="demo-step-indicator">
+              <span className={demoStepIndicator}>
                 {i < currentStep ? "\u2713" : i === currentStep ? "\u25cf" : "\u25cb"}
               </span>
-              <div className="demo-step-text">
+              <div className={demoStepText}>
                 <strong>{step.label}</strong>
                 {i === currentStep && (
-                  <span className="demo-step-detail">{step.detail}</span>
+                  <span className={demoStepDetail}>{step.detail}</span>
                 )}
               </div>
             </div>
@@ -150,38 +177,38 @@ export function DemoFlow({ onReset }: DemoFlowProps) {
       )}
 
       {summary && currentStep >= 3 && (
-        <div className="demo-summary">
+        <div className={demoSummary}>
           <h3>クラス集計</h3>
-          <div className="demo-stats">
-            <div className="demo-stat">
-              <span className="demo-stat-label">参加者</span>
-              <span className="demo-stat-value">{summary.participantCount}名</span>
+          <div className={demoStats}>
+            <div className={demoStat}>
+              <span className={demoStatLabel}>参加者</span>
+              <span className={demoStatValue}>{summary.participantCount}名</span>
             </div>
-            <div className="demo-stat">
-              <span className="demo-stat-label">回答数</span>
-              <span className="demo-stat-value">{summary.responseCount}件</span>
+            <div className={demoStat}>
+              <span className={demoStatLabel}>回答数</span>
+              <span className={demoStatValue}>{summary.responseCount}件</span>
             </div>
-            <div className="demo-stat">
-              <span className="demo-stat-label">正答率</span>
-              <span className="demo-stat-value">
+            <div className={demoStat}>
+              <span className={demoStatLabel}>正答率</span>
+              <span className={demoStatValue}>
                 {Math.round(summary.correctRate * 100)}%
               </span>
             </div>
-            <div className="demo-stat">
-              <span className="demo-stat-label">再挑戦成功率</span>
-              <span className="demo-stat-value">
+            <div className={demoStat}>
+              <span className={demoStatLabel}>再挑戦成功率</span>
+              <span className={demoStatValue}>
                 {Math.round(summary.retrySuccessRate * 100)}%
               </span>
             </div>
-            <div className="demo-stat">
-              <span className="demo-stat-label">平均ヒント数</span>
-              <span className="demo-stat-value">
+            <div className={demoStat}>
+              <span className={demoStatLabel}>平均ヒント数</span>
+              <span className={demoStatValue}>
                 {summary.averageHints.toFixed(1)}
               </span>
             </div>
           </div>
           {summary.misconceptions.length > 0 && (
-            <div className="demo-misconceptions">
+            <div className={demoMisconceptions}>
               <h4>上位の誤概念</h4>
               <ul>
                 {summary.misconceptions.slice(0, 3).map((m) => (
@@ -196,30 +223,30 @@ export function DemoFlow({ onReset }: DemoFlowProps) {
       )}
 
       {lessonPlan && currentStep >= 4 && (
-        <div className="demo-lesson-plan">
+        <div className={demoLessonPlan}>
           <h3>生成された授業案</h3>
-          <div className="demo-plan-focus">
+          <div className={demoPlanFocus}>
             <strong>焦点:</strong> {lessonPlan.focus}
           </div>
-          <ol className="demo-plan-steps">
+          <ol className={demoPlanSteps}>
             {lessonPlan.steps.map((s, i) => (
               <li key={i}>{s}</li>
             ))}
           </ol>
-          <div className="demo-plan-check">
+          <div className={demoPlanCheck}>
             <strong>確認問題:</strong> {lessonPlan.checkQuestion}
           </div>
-          <div className="demo-plan-note">
+          <div className={demoPlanNote}>
             <strong>教師メモ:</strong> {lessonPlan.teacherNote}
           </div>
         </div>
       )}
 
       {error && (
-        <div className="demo-error" role="alert">
+        <div className={demoError} role="alert">
           <p>エラーが発生しました: {error}</p>
           {isTauriEnvironment() && (
-            <button type="button" className="reset-button" onClick={runDemo}>
+            <button type="button" className={resetButton} onClick={runDemo}>
               もう一度試す
             </button>
           )}
@@ -227,12 +254,12 @@ export function DemoFlow({ onReset }: DemoFlowProps) {
       )}
 
       {currentStep === 5 && (
-        <div className="demo-complete">
+        <div className={demoComplete}>
           <p>3分デモが完了しました。</p>
           {onReset && (
             <button
               type="button"
-              className="reset-button"
+              className={resetButton}
               onClick={onReset}
               style={{ marginTop: "1rem" }}
             >

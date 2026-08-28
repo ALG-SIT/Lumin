@@ -1,5 +1,38 @@
 import { useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { baseInputFocus } from "../styles/global.css.ts";
+import {
+  errorMessage,
+  privacyNote,
+  primaryButton,
+  secondaryButton,
+  progressFill,
+  progressBar,
+  questionPrompt,
+  questionConcept,
+  quizHeader,
+} from "../styles/shared.css.ts";
+import {
+  studentQuiz,
+  quizTitle,
+  quizProgress,
+  progressBarInQuiz,
+  questionCard,
+  answerInput,
+  feedback as feedbackBase,
+  feedbackCorrect,
+  feedbackIncorrect,
+  hintCard,
+  hintHeader,
+  hintLabel,
+  hintGuard,
+  hintText,
+  hintActions,
+  completionCard,
+  completionIcon,
+  completionTitle,
+  completionMessage,
+} from "./StudentQuiz.css.ts";
 
 export interface QuizQuestion {
   id: string;
@@ -240,19 +273,19 @@ export function StudentQuiz({
 
   if (isComplete) {
     return (
-      <div className="student-quiz">
-        <div className="completion-card">
-          <div className="completion-icon" aria-hidden>
+      <div className={studentQuiz}>
+        <div className={completionCard}>
+          <div className={completionIcon} aria-hidden>
             ☀
           </div>
-          <h2 className="completion-title">おつかれさまでした</h2>
-          <p className="completion-message">
+          <h2 className={completionTitle}>おつかれさまでした</h2>
+          <p className={completionMessage}>
             考え直した過程も、学びの大切な一部です。
             <br />
             先生には匿名の分析結果だけが共有されました。
           </p>
           <button
-            className="primary-button"
+            className={primaryButton}
             type="button"
             onClick={onComplete}
           >
@@ -270,27 +303,27 @@ export function StudentQuiz({
     isAnalyzing || (feedback !== "correct" && answer.trim() === "");
 
   return (
-    <div className="student-quiz">
-      <div className="quiz-header">
-        <span className="quiz-title">{quiz.title}</span>
-        <span className="quiz-progress">{progressLabel}</span>
+    <div className={studentQuiz}>
+      <div className={quizHeader}>
+        <span className={quizTitle}>{quiz.title}</span>
+        <span className={quizProgress}>{progressLabel}</span>
       </div>
 
-      <div className="progress-bar" aria-label="小テストの進捗">
+      <div className={`${progressBar} ${progressBarInQuiz}`} aria-label="小テストの進捗">
         <div
-          className="progress-fill"
+          className={progressFill}
           style={{
             width: `${((questionIndex + 1) / totalQuestions) * 100}%`,
           }}
         />
       </div>
 
-      <div className="question-card">
-        <span className="question-concept">{question.concept}</span>
-        <p className="question-prompt">{question.prompt}</p>
+      <div className={questionCard}>
+        <span className={questionConcept}>{question.concept}</span>
+        <p className={questionPrompt}>{question.prompt}</p>
 
         <input
-          className="answer-input"
+          className={`${answerInput} ${baseInputFocus}`}
           value={answer}
           onChange={(e) => setAnswer(e.target.value)}
           placeholder="答えを入力"
@@ -303,16 +336,16 @@ export function StudentQuiz({
         />
 
         {feedback === "correct" && (
-          <p className="feedback correct">その考え方で正解です</p>
+          <p className={`${feedbackBase} ${feedbackCorrect}`}>その考え方で正解です</p>
         )}
         {feedback === "incorrect" && (
-          <p className="feedback incorrect">
+          <p className={`${feedbackBase} ${feedbackIncorrect}`}>
             まだ少し違うようです。ヒントを手がかりにもう一度。
           </p>
         )}
 
         <button
-          className="primary-button"
+          className={primaryButton}
           type="button"
           onClick={feedback === "correct" ? handleAdvance : handleSubmit}
           disabled={submitDisabled}
@@ -328,15 +361,15 @@ export function StudentQuiz({
       </div>
 
       {hintCount > 0 && feedback !== "correct" && (
-        <div className="hint-card">
-          <div className="hint-header">
-            <span className="hint-label">ヒント {hintCount}</span>
-            <span className="hint-guard">答えはまだ見せません</span>
+        <div className={hintCard}>
+          <div className={hintHeader}>
+            <span className={hintLabel}>ヒント {hintCount}</span>
+            <span className={hintGuard}>答えはまだ見せません</span>
           </div>
-          <p className="hint-text">{currentHint}</p>
-          <div className="hint-actions">
+          <p className={hintText}>{currentHint}</p>
+          <div className={hintActions}>
             <button
-              className="secondary-button"
+              className={secondaryButton}
               type="button"
               onClick={handleNextHint}
               disabled={isAnalyzing || hintCount >= question.hints.length}
@@ -344,7 +377,7 @@ export function StudentQuiz({
               次のヒント
             </button>
             <button
-              className="secondary-button"
+              className={secondaryButton}
               type="button"
               onClick={handleRetry}
               disabled={isAnalyzing}
@@ -355,9 +388,9 @@ export function StudentQuiz({
         </div>
       )}
 
-      {error && <p className="error-message">{error}</p>}
+      {error && <p className={errorMessage}>{error}</p>}
 
-      <p className="privacy-note">
+      <p className={privacyNote}>
         ローカル分析中：解答は端末外へ送信されません
       </p>
     </div>

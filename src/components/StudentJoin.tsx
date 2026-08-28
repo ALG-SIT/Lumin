@@ -1,5 +1,28 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { baseInputFocus } from "../styles/global.css.ts";
+import { errorMessage, privacyNote } from "../styles/shared.css.ts";
+import {
+  studentJoin,
+  joinHeader,
+  joinTitle,
+  joinReset,
+  joinSubtitle,
+  joinCard,
+  joinStatus,
+  sectionLabel,
+  teacherSection,
+  teacherList,
+  teacherCard,
+  teacherInfo,
+  teacherName,
+  teacherMeta,
+  manualJoin,
+  manualFields,
+  manualInput,
+  codeInput,
+  joinButton,
+} from "./StudentJoin.css.ts";
 
 export interface DiscoveredTeacher {
   name: string;
@@ -75,37 +98,37 @@ export function StudentJoin({ onJoined, onReset }: StudentJoinProps) {
   const canJoin = joinCode.length === 4;
 
   return (
-    <div className="student-join">
-      <div className="join-header">
-        <h2 className="join-title">教室に参加</h2>
-        <button className="join-reset" type="button" onClick={onReset}>
+    <div className={studentJoin}>
+      <div className={joinHeader}>
+        <h2 className={joinTitle}>教室に参加</h2>
+        <button className={joinReset} type="button" onClick={onReset}>
           役割を選び直す
         </button>
       </div>
 
-      <p className="join-subtitle">
+      <p className={joinSubtitle}>
         同じWi-Fiにいる先生を探しています…
       </p>
 
-      <div className="join-card">
+      <div className={joinCard}>
         {isBrowsing && teachers.length === 0 && (
-          <p className="join-status">教室を検索中</p>
+          <p className={joinStatus}>教室を検索中</p>
         )}
 
         {teachers.length > 0 && (
-          <div className="teacher-section">
-            <h3 className="section-label">見つかった教室</h3>
-            <div className="teacher-list">
+          <div className={teacherSection}>
+            <h3 className={sectionLabel}>見つかった教室</h3>
+            <div className={teacherList}>
               {teachers.map((teacher) => (
-                <div key={teacher.session_uuid} className="teacher-card">
-                  <div className="teacher-info">
-                    <span className="teacher-name">{teacher.name}</span>
-                    <span className="teacher-meta">
+                <div key={teacher.session_uuid} className={teacherCard}>
+                  <div className={teacherInfo}>
+                    <span className={teacherName}>{teacher.name}</span>
+                    <span className={teacherMeta}>
                       {teacher.host}:{teacher.port}
                     </span>
                   </div>
                   <input
-                    className="code-input"
+                    className={`${codeInput} ${baseInputFocus}`}
                     type="text"
                     inputMode="numeric"
                     autoComplete="one-time-code"
@@ -117,7 +140,7 @@ export function StudentJoin({ onJoined, onReset }: StudentJoinProps) {
                     maxLength={4}
                   />
                   <button
-                    className="join-button"
+                    className={joinButton}
                     type="button"
                     onClick={() => handleJoin(teacher)}
                     disabled={!canJoin}
@@ -130,24 +153,24 @@ export function StudentJoin({ onJoined, onReset }: StudentJoinProps) {
           </div>
         )}
 
-        <div className="manual-join">
-          <h3 className="section-label">または、手動で入力</h3>
-          <div className="manual-fields">
+        <div className={manualJoin}>
+          <h3 className={sectionLabel}>または、手動で入力</h3>
+          <div className={manualFields}>
             <input
-              className="manual-input"
+              className={`${manualInput} ${baseInputFocus}`}
               placeholder="IPアドレス"
               value={manualIp}
               onChange={(e) => setManualIp(e.target.value)}
             />
             <input
-              className="manual-input"
+              className={`${manualInput} ${baseInputFocus}`}
               placeholder="ポート"
               type="number"
               value={manualPort}
               onChange={(e) => setManualPort(e.target.value)}
             />
             <input
-              className="code-input"
+              className={`${codeInput} ${baseInputFocus}`}
               type="text"
               inputMode="numeric"
               autoComplete="one-time-code"
@@ -160,7 +183,7 @@ export function StudentJoin({ onJoined, onReset }: StudentJoinProps) {
             />
           </div>
           <button
-            className="join-button"
+            className={joinButton}
             type="button"
             onClick={handleManualJoin}
             disabled={!manualIp || !manualPort || !canJoin}
@@ -170,9 +193,9 @@ export function StudentJoin({ onJoined, onReset }: StudentJoinProps) {
         </div>
       </div>
 
-      {error && <p className="error-message">{error}</p>}
+      {error && <p className={errorMessage}>{error}</p>}
 
-      <p className="privacy-note">
+      <p className={privacyNote}>
         教師へ共有されるのは、正誤・誤概念・ヒント回数・再回答結果だけです。
       </p>
     </div>
