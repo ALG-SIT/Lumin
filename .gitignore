@@ -12,6 +12,7 @@ node_modules/
 
 # Rust
 src-tauri/target/
+target/
 
 # Build output
 dist/
