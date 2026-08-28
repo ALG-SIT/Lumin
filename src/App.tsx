@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { app, appBar, brand, brandIcon, roleBadge, resetButton } from "./components/App.css.ts";
 import { DemoFlow } from "./components/DemoFlow";
 import { RoleSelection, type LuminRole } from "./components/RoleSelection";
 import { StudentJoin, type JoinResultPayload } from "./components/StudentJoin";
@@ -42,20 +43,20 @@ export default function App() {
   };
 
   return (
-    <div className="app">
-      <header className="app-bar">
-        <span className="brand">
-          <SunIcon className="brand-icon" />
+    <div className={app}>
+      <header className={appBar}>
+        <span className={brand}>
+          <SunIcon className={brandIcon} />
           Lumin
         </span>
         {role && (
           <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-            <span className="role-badge">
+            <span className={roleBadge}>
               現在の役割: {ROLE_LABELS[role]}
             </span>
             <button
               type="button"
-              className="reset-button"
+              className={resetButton}
               onClick={() => setRole(null)}
             >
               役割を切り替える

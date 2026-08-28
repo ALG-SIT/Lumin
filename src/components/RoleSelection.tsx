@@ -1,3 +1,17 @@
+import {
+  appTitle,
+  roleAction,
+  roleButton,
+  roleButtons,
+  roleDetail,
+  roleIcon,
+  roleSelection,
+  roleTitle,
+  tagline,
+  titleIcon,
+  trustLabels,
+} from "./RoleSelection.css.ts";
+
 export type LuminRole = "teacher" | "student" | "demo";
 
 export interface RoleSelectionProps {
@@ -56,14 +70,14 @@ function RoleCard({ role, title, detail, icon, onSelect }: RoleCardProps) {
   return (
     <button
       type="button"
-      className="role-button"
+      className={roleButton}
       onClick={() => onSelect(role)}
       aria-label={`${title}画面を開く`}
     >
-      <span className="role-icon">{icon}</span>
-      <p className="role-title">{title}</p>
-      <p className="role-detail">{detail}</p>
-      <span className="role-action">
+      <span className={roleIcon}>{icon}</span>
+      <p className={roleTitle}>{title}</p>
+      <p className={roleDetail}>{detail}</p>
+      <span className={roleAction}>
         続ける
         <ArrowRightIcon />
       </span>
@@ -73,13 +87,13 @@ function RoleCard({ role, title, detail, icon, onSelect }: RoleCardProps) {
 
 export function RoleSelection({ onSelect }: RoleSelectionProps) {
   return (
-    <section className="role-selection" aria-labelledby="lumin-title">
-      <h1 id="lumin-title" className="app-title">
-        <SunIcon className="title-icon" />
+    <section className={roleSelection} aria-labelledby="lumin-title">
+      <h1 id="lumin-title" className={appTitle}>
+        <SunIcon className={titleIcon} />
         Lumin
       </h1>
-      <p className="tagline">理解を照らし、次の学びにつなげる</p>
-      <div className="role-buttons" role="group" aria-label="役割選択">
+      <p className={tagline}>理解を照らし、次の学びにつなげる</p>
+      <div className={roleButtons} role="group" aria-label="役割選択">
         <RoleCard
           role="teacher"
           title="先生として始める"
@@ -101,12 +115,12 @@ export function RoleSelection({ onSelect }: RoleSelectionProps) {
           icon={<DemoIcon />}
           onSelect={onSelect}
         />
-            <ul className="trust-labels" aria-label="プライバシーの特徴">
-        <li>インターネット接続なしで利用できます</li>
-        <li>解答本文は生徒の端末から出ません</li>
-        <li>最終判断をするのは先生です</li>
-      </ul>
-</div>
+        <ul className={trustLabels} aria-label="プライバシーの特徴">
+          <li>インターネット接続なしで利用できます</li>
+          <li>解答本文は生徒の端末から出ません</li>
+          <li>最終判断をするのは先生です</li>
+        </ul>
+      </div>
     </section>
   );
 }
