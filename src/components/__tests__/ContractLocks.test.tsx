@@ -1,9 +1,16 @@
 // @vitest-environment jsdom
 // Tauri v2 引数契約ロック: JSキーはcamelCase必須(tauri-macros既定 ArgumentCase::Camel)。
+
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { StudentQuiz } from "../StudentQuiz";
 import type { Quiz } from "../StudentQuiz";
+import { StudentQuiz } from "../StudentQuiz";
 
 const invokeMock = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({
@@ -40,7 +47,9 @@ describe("StudentQuiz IPC contracts (camelCase keys)", () => {
       return Promise.reject(new Error(`unexpected ${cmd}`));
     });
     const onComplete = vi.fn();
-    render(<StudentQuiz sessionId="sess" quiz={QUIZ} onComplete={onComplete} />);
+    render(
+      <StudentQuiz sessionId="sess" quiz={QUIZ} onComplete={onComplete} />,
+    );
 
     fireEvent.change(screen.getByPlaceholderText("答えを入力"), {
       target: { value: "3" },
@@ -50,7 +59,8 @@ describe("StudentQuiz IPC contracts (camelCase keys)", () => {
     await waitFor(() => {
       const call = invokeMock.mock.calls.find(([c]) => c === "analyze_answer");
       expect(call).toBeDefined();
-      const keys = Object.keys(call![1] as Record<string, unknown>).sort();
+      if (!call) throw new Error("analyze_answer was not invoked");
+      const keys = Object.keys(call[1] as Record<string, unknown>).sort();
       expect(keys).toEqual(["hintLevel", "questionJson", "studentAnswer"]);
     });
   });
@@ -65,7 +75,7 @@ describe("StudentQuiz IPC contracts (camelCase keys)", () => {
         });
       // generate_hint はAI未ロード想定でreject
       return Promise.reject(
-        new Error("AIモデルが未ロードのためヒント生成できません")
+        new Error("AIモデルが未ロードのためヒント生成できません"),
       );
     });
     render(<StudentQuiz sessionId="sess" quiz={QUIZ} onComplete={() => {}} />);
@@ -78,7 +88,8 @@ describe("StudentQuiz IPC contracts (camelCase keys)", () => {
     await waitFor(() => {
       const call = invokeMock.mock.calls.find(([c]) => c === "generate_hint");
       expect(call).toBeDefined();
-      const keys = Object.keys(call![1] as Record<string, unknown>).sort();
+      if (!call) throw new Error("generate_hint was not invoked");
+      const keys = Object.keys(call[1] as Record<string, unknown>).sort();
       expect(keys).toEqual(["concept", "hintLevel", "questionId"]);
     });
     // 失敗してもバンクのヒントが表示される(モック文は出ない)
