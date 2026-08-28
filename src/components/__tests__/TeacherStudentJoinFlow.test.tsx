@@ -6,11 +6,11 @@
  * All Tauri commands are mocked.
  */
 import "@testing-library/jest-dom/vitest";
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { RoleSelection } from "../RoleSelection";
-import { TeacherSessionControl } from "../TeacherSessionControl";
 import { StudentJoin } from "../StudentJoin";
+import { TeacherSessionControl } from "../TeacherSessionControl";
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(async (cmd: string) => {
@@ -49,12 +49,20 @@ describe("Teacher-student join flow (integration)", () => {
 
   it("teacher selects role and sees session control", () => {
     let role: string | null = null;
-    render(<RoleSelection onSelect={(r) => { role = r; }} />);
+    render(
+      <RoleSelection
+        onSelect={(r) => {
+          role = r;
+        }}
+      />,
+    );
 
     fireEvent.click(screen.getByText("先生として始める"));
     expect(role).toBe("teacher");
 
-    const { unmount } = render(<TeacherSessionControl onSessionStarted={() => {}} />);
+    const { unmount } = render(
+      <TeacherSessionControl onSessionStarted={() => {}} />,
+    );
     expect(screen.getByText("小テスト配信")).toBeDefined();
     expect(screen.getByText("教材を選択")).toBeDefined();
     unmount();
@@ -62,13 +70,19 @@ describe("Teacher-student join flow (integration)", () => {
 
   it("student selects role and sees join screen", () => {
     let role: string | null = null;
-    render(<RoleSelection onSelect={(r) => { role = r; }} />);
+    render(
+      <RoleSelection
+        onSelect={(r) => {
+          role = r;
+        }}
+      />,
+    );
 
     fireEvent.click(screen.getByText("生徒として参加"));
     expect(role).toBe("student");
 
     const { unmount } = render(
-      <StudentJoin onJoined={() => {}} onReset={() => {}} />
+      <StudentJoin onJoined={() => {}} onReset={() => {}} />,
     );
     expect(screen.getByText("教室に参加")).toBeDefined();
     expect(screen.getByText("または、手動で入力")).toBeDefined();

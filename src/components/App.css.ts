@@ -1,4 +1,4 @@
-import { style } from '@vanilla-extract/css';
+import { style } from "@vanilla-extract/css";
 
 // App.tsx batch (plan checkbox 4). Declaration values are verbatim copies of
 // the corresponding src/index.css rules (base rule + every descendant-combined
@@ -8,25 +8,25 @@ import { style } from '@vanilla-extract/css';
 
 // index.css L78-82.
 export const app = style({
-  display: 'flex',
-  flexDirection: 'column',
-  minHeight: '100vh',
+  display: "flex",
+  flexDirection: "column",
+  minHeight: "100vh",
 });
 
 // index.css L84-93 + L1587-1590 (@media max-width: 480px).
 export const appBar = style({
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  gap: 'var(--space-3)',
-  padding: '12px 16px',
-  background: 'var(--lumin-purple)',
-  color: 'white',
-  borderBottom: '1px solid var(--lumin-purple-dark)',
-  '@media': {
-    '(max-width: 480px)': {
-      padding: '10px 12px',
-      flexWrap: 'wrap',
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: "var(--space-3)",
+  padding: "12px 16px",
+  background: "var(--lumin-purple)",
+  color: "white",
+  borderBottom: "1px solid var(--lumin-purple-dark)",
+  "@media": {
+    "(max-width: 480px)": {
+      padding: "10px 12px",
+      flexWrap: "wrap",
     },
   },
 });
@@ -35,12 +35,12 @@ export const appBar = style({
 export const brand = style({
   selectors: {
     [`${appBar} &`]: {
-      display: 'flex',
-      alignItems: 'center',
-      gap: 'var(--space-2)',
-      fontWeight: '900',
-      letterSpacing: '0.1em',
-      color: 'white',
+      display: "flex",
+      alignItems: "center",
+      gap: "var(--space-2)",
+      fontWeight: "900",
+      letterSpacing: "0.1em",
+      color: "white",
     },
   },
 });
@@ -49,9 +49,9 @@ export const brand = style({
 export const brandIcon = style({
   selectors: {
     [`${appBar} &`]: {
-      width: '24px',
-      height: '24px',
-      color: 'white',
+      width: "24px",
+      height: "24px",
+      color: "white",
     },
   },
 });
@@ -61,15 +61,15 @@ export const brandIcon = style({
 export const roleBadge = style({
   selectors: {
     [`${appBar} &`]: {
-      fontSize: '0.875rem',
-      color: 'rgba(255, 255, 255, 0.9)',
+      fontSize: "0.875rem",
+      color: "rgba(255, 255, 255, 0.9)",
     },
   },
-  '@media': {
-    '(max-width: 480px)': {
+  "@media": {
+    "(max-width: 480px)": {
       selectors: {
         [`${appBar} &`]: {
-          fontSize: '0.75rem',
+          fontSize: "0.75rem",
         },
       },
     },
@@ -89,32 +89,32 @@ export const roleBadge = style({
 export const resetButton = style({
   selectors: {
     [`${appBar} &`]: {
-      background: 'rgba(255, 255, 255, 0.2)',
-      border: 'none',
-      color: 'white',
-      padding: '6px 12px',
-      borderRadius: '8px',
-      cursor: 'pointer',
-      fontSize: '0.875rem',
-      transition: 'background 0.2s ease, transform 0.2s ease',
+      background: "rgba(255, 255, 255, 0.2)",
+      border: "none",
+      color: "white",
+      padding: "6px 12px",
+      borderRadius: "8px",
+      cursor: "pointer",
+      fontSize: "0.875rem",
+      transition: "background 0.2s ease, transform 0.2s ease",
     },
     [`${appBar} &:hover`]: {
-      background: 'rgba(255, 255, 255, 0.3)',
+      background: "rgba(255, 255, 255, 0.3)",
     },
     [`${appBar} &:active`]: {
-      transform: 'scale(0.98)',
+      transform: "scale(0.98)",
     },
   },
-  '@media': {
-    '(prefers-reduced-motion: reduce)': {
+  "@media": {
+    "(prefers-reduced-motion: reduce)": {
       selectors: {
         [`${appBar} &`]: {
-          transition: 'none',
-          transform: 'none',
+          transition: "none",
+          transform: "none",
         },
         [`${appBar} &:active`]: {
-          transition: 'none',
-          transform: 'none',
+          transition: "none",
+          transform: "none",
         },
       },
     },

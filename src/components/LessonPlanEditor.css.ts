@@ -1,4 +1,4 @@
-import { style } from '@vanilla-extract/css';
+import { style } from "@vanilla-extract/css";
 
 // LessonPlanEditor.tsx batch (plan checkbox 6). Declaration values are
 // verbatim copies of the corresponding src/index.css rules.
@@ -30,16 +30,16 @@ import { style } from '@vanilla-extract/css';
 // value and becomes the only placeholder source once T8/T9 delete the
 // element bands.
 export const manualInput = style({
-  padding: 'var(--space-3)',
-  fontSize: '1rem',
-  color: 'var(--lumin-ink)',
-  background: 'var(--lumin-canvas)',
-  border: '1px solid var(--lumin-border)',
-  borderRadius: 'var(--radius-md)',
-  outline: 'none',
-  transition: 'border-color 0.2s ease, box-shadow 0.2s ease',
-  ':focus': {
-    borderColor: 'var(--lumin-indigo)',
-    boxShadow: '0 0 0 3px var(--lumin-indigo-soft)',
+  padding: "var(--space-3)",
+  fontSize: "1rem",
+  color: "var(--lumin-ink)",
+  background: "var(--lumin-canvas)",
+  border: "1px solid var(--lumin-border)",
+  borderRadius: "var(--radius-md)",
+  outline: "none",
+  transition: "border-color 0.2s ease, box-shadow 0.2s ease",
+  ":focus": {
+    borderColor: "var(--lumin-indigo)",
+    boxShadow: "0 0 0 3px var(--lumin-indigo-soft)",
   },
 });

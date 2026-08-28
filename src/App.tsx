@@ -1,8 +1,15 @@
 import { useState } from "react";
-import { app, appBar, brand, brandIcon, roleBadge, resetButton } from "./components/App.css.ts";
+import {
+  app,
+  appBar,
+  brand,
+  brandIcon,
+  resetButton,
+  roleBadge,
+} from "./components/App.css.ts";
 import { DemoFlow } from "./components/DemoFlow";
-import { RoleSelection, type LuminRole } from "./components/RoleSelection";
-import { StudentJoin, type JoinResultPayload } from "./components/StudentJoin";
+import { type LuminRole, RoleSelection } from "./components/RoleSelection";
+import { type JoinResultPayload, StudentJoin } from "./components/StudentJoin";
 import { StudentQuiz } from "./components/StudentQuiz";
 import { TeacherDashboard } from "./components/TeacherDashboard";
 
@@ -50,10 +57,10 @@ export default function App() {
           Lumin
         </span>
         {role && (
-          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-            <span className={roleBadge}>
-              現在の役割: {ROLE_LABELS[role]}
-            </span>
+          <div
+            style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}
+          >
+            <span className={roleBadge}>現在の役割: {ROLE_LABELS[role]}</span>
             <button
               type="button"
               className={resetButton}
@@ -66,7 +73,9 @@ export default function App() {
       </header>
       <main>
         {!role && <RoleSelection onSelect={setRole} />}
-        {role === "teacher" && <TeacherDashboard onReset={() => setRole(null)} />}
+        {role === "teacher" && (
+          <TeacherDashboard onReset={() => setRole(null)} />
+        )}
         {role === "student" && !studentJoined && (
           <StudentJoin
             onJoined={handleStudentJoined}
@@ -77,7 +86,10 @@ export default function App() {
           <StudentQuiz
             sessionId={studentSessionId}
             participantToken={participantToken}
-            quiz={(joinedQuiz as Parameters<typeof StudentQuiz>[0]["quiz"]) ?? undefined}
+            quiz={
+              (joinedQuiz as Parameters<typeof StudentQuiz>[0]["quiz"]) ??
+              undefined
+            }
             onComplete={() => setStudentJoined(false)}
           />
         )}

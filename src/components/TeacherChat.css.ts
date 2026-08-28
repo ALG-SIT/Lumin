@@ -1,4 +1,4 @@
-import { globalStyle, keyframes, style } from '@vanilla-extract/css';
+import { globalStyle, keyframes, style } from "@vanilla-extract/css";
 
 // TeacherChat.tsx batch (plan checkbox 7). Declaration values are verbatim
 // copies of the corresponding src/index.css rules (base rules, pseudo/state
@@ -17,17 +17,17 @@ import { globalStyle, keyframes, style } from '@vanilla-extract/css';
 
 // index.css L716-725 + @media 640px L1007-1009.
 export const teacherChat = style({
-  display: 'flex',
-  flexDirection: 'column',
-  height: '100%',
-  maxWidth: '1000px',
-  margin: '0 auto',
-  padding: 'var(--space-5)',
-  gap: 'var(--space-4)',
-  background: 'var(--lumin-bg)',
-  '@media': {
-    '(max-width: 640px)': {
-      padding: 'var(--space-3)',
+  display: "flex",
+  flexDirection: "column",
+  height: "100%",
+  maxWidth: "1000px",
+  margin: "0 auto",
+  padding: "var(--space-5)",
+  gap: "var(--space-4)",
+  background: "var(--lumin-bg)",
+  "@media": {
+    "(max-width: 640px)": {
+      padding: "var(--space-3)",
     },
   },
 });
@@ -35,105 +35,105 @@ export const teacherChat = style({
 // index.css L858-862 (@keyframes teacher-chat-spin { to { transform: rotate(360deg) } }).
 const spin = keyframes({
   to: {
-    transform: 'rotate(360deg)',
+    transform: "rotate(360deg)",
   },
 });
 
 // index.css L727-737 + @media 640px L1011-1014.
 export const teacherChatHeader = style({
-  display: 'flex',
-  alignItems: 'flex-start',
-  justifyContent: 'space-between',
-  gap: 'var(--space-3)',
-  padding: 'var(--space-4) var(--space-5)',
-  background: 'var(--lumin-card)',
-  border: '1px solid var(--lumin-border)',
-  borderRadius: 'var(--radius-lg)',
-  boxShadow: 'var(--shadow-sm)',
-  '@media': {
-    '(max-width: 640px)': {
-      flexDirection: 'column',
-      gap: 'var(--space-2)',
+  display: "flex",
+  alignItems: "flex-start",
+  justifyContent: "space-between",
+  gap: "var(--space-3)",
+  padding: "var(--space-4) var(--space-5)",
+  background: "var(--lumin-card)",
+  border: "1px solid var(--lumin-border)",
+  borderRadius: "var(--radius-lg)",
+  boxShadow: "var(--shadow-sm)",
+  "@media": {
+    "(max-width: 640px)": {
+      flexDirection: "column",
+      gap: "var(--space-2)",
     },
   },
 });
 
 // index.css L739-743 (`.teacher-chat-header h2`, unclassed h2).
 globalStyle(`${teacherChatHeader} h2`, {
-  margin: '0 0 var(--space-1) 0',
-  fontSize: '1.5rem',
-  color: 'var(--lumin-ink)',
+  margin: "0 0 var(--space-1) 0",
+  fontSize: "1.5rem",
+  color: "var(--lumin-ink)",
 });
 
 // index.css L745-749 (`.teacher-chat-header p`, unclassed p).
 globalStyle(`${teacherChatHeader} p`, {
-  margin: '0',
-  color: 'var(--lumin-text-secondary)',
-  fontSize: '0.9375rem',
+  margin: "0",
+  color: "var(--lumin-text-secondary)",
+  fontSize: "0.9375rem",
 });
 
 // index.css L751-757.
 export const teacherChatPrivacy = style({
-  display: 'flex',
-  alignItems: 'center',
-  gap: 'var(--space-2)',
-  fontSize: '0.8125rem',
-  color: 'var(--lumin-muted)',
+  display: "flex",
+  alignItems: "center",
+  gap: "var(--space-2)",
+  fontSize: "0.8125rem",
+  color: "var(--lumin-muted)",
 });
 
 // index.css L759-772 + @media 640px L1020-1022.
 export const teacherChatHistory = style({
-  flex: '1 1 auto',
-  minHeight: '280px',
-  maxHeight: '60vh',
-  overflowY: 'auto',
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 'var(--space-3)',
-  padding: 'var(--space-5)',
-  background: 'var(--lumin-card)',
-  border: '1px solid var(--lumin-border)',
-  borderRadius: 'var(--radius-lg)',
-  boxShadow: 'var(--shadow-sm)',
-  '@media': {
-    '(max-width: 640px)': {
-      padding: 'var(--space-3)',
+  flex: "1 1 auto",
+  minHeight: "280px",
+  maxHeight: "60vh",
+  overflowY: "auto",
+  display: "flex",
+  flexDirection: "column",
+  gap: "var(--space-3)",
+  padding: "var(--space-5)",
+  background: "var(--lumin-card)",
+  border: "1px solid var(--lumin-border)",
+  borderRadius: "var(--radius-lg)",
+  boxShadow: "var(--shadow-sm)",
+  "@media": {
+    "(max-width: 640px)": {
+      padding: "var(--space-3)",
     },
   },
 });
 
 // index.css L774-780.
 export const teacherChatWelcome = style({
-  padding: 'var(--space-5)',
-  background: 'var(--lumin-indigo-soft)',
-  border: '1px solid var(--lumin-indigo-soft)',
-  borderRadius: 'var(--radius-lg)',
-  color: 'var(--lumin-ink)',
+  padding: "var(--space-5)",
+  background: "var(--lumin-indigo-soft)",
+  border: "1px solid var(--lumin-indigo-soft)",
+  borderRadius: "var(--radius-lg)",
+  color: "var(--lumin-ink)",
 });
 
 // index.css L782-786 (`.teacher-chat-welcome h3`, unclassed h3).
 globalStyle(`${teacherChatWelcome} h3`, {
-  margin: '0 0 var(--space-2) 0',
-  fontSize: '1.125rem',
-  color: 'var(--lumin-indigo)',
+  margin: "0 0 var(--space-2) 0",
+  fontSize: "1.125rem",
+  color: "var(--lumin-indigo)",
 });
 
 // index.css L788-792 (`.teacher-chat-welcome p`, unclassed p).
 globalStyle(`${teacherChatWelcome} p`, {
-  margin: '0 0 var(--space-3) 0',
-  color: 'var(--lumin-text-secondary)',
-  fontSize: '0.9375rem',
+  margin: "0 0 var(--space-3) 0",
+  color: "var(--lumin-text-secondary)",
+  fontSize: "0.9375rem",
 });
 
 // index.css L794-799 + @media 640px L1016-1018.
 export const teacherChatMessage = style({
-  display: 'flex',
-  flexDirection: 'column',
-  maxWidth: '78%',
-  gap: 'var(--space-1)',
-  '@media': {
-    '(max-width: 640px)': {
-      maxWidth: '88%',
+  display: "flex",
+  flexDirection: "column",
+  maxWidth: "78%",
+  gap: "var(--space-1)",
+  "@media": {
+    "(max-width: 640px)": {
+      maxWidth: "88%",
     },
   },
 });
@@ -144,8 +144,8 @@ export const teacherChatMessage = style({
 export const messageUser = style({
   selectors: {
     [`${teacherChatMessage}&`]: {
-      alignSelf: 'flex-end',
-      alignItems: 'flex-end',
+      alignSelf: "flex-end",
+      alignItems: "flex-end",
     },
   },
 });
@@ -154,28 +154,28 @@ export const messageUser = style({
 export const messageAssistant = style({
   selectors: {
     [`${teacherChatMessage}&`]: {
-      alignSelf: 'flex-start',
-      alignItems: 'flex-start',
+      alignSelf: "flex-start",
+      alignItems: "flex-start",
     },
   },
 });
 
 // index.css L811-817.
 export const teacherChatMessageRole = style({
-  fontSize: '0.75rem',
-  fontWeight: '700',
-  color: 'var(--lumin-muted)',
-  textTransform: 'uppercase',
-  letterSpacing: '0.03em',
+  fontSize: "0.75rem",
+  fontWeight: "700",
+  color: "var(--lumin-muted)",
+  textTransform: "uppercase",
+  letterSpacing: "0.03em",
 });
 
 // index.css L819-825.
 export const teacherChatBubble = style({
-  padding: 'var(--space-3) var(--space-4)',
-  borderRadius: 'var(--radius-lg)',
-  lineHeight: '1.55',
-  whiteSpace: 'pre-wrap',
-  wordBreak: 'break-word',
+  padding: "var(--space-3) var(--space-4)",
+  borderRadius: "var(--radius-lg)",
+  lineHeight: "1.55",
+  whiteSpace: "pre-wrap",
+  wordBreak: "break-word",
 });
 
 // index.css L827-831 (`.teacher-chat-message.user .teacher-chat-bubble`).
@@ -183,46 +183,46 @@ export const teacherChatBubble = style({
 // the loading bubble inherits the assistant variant exactly like the source,
 // with no per-element variant class needed.
 globalStyle(`${teacherChatMessage}${messageUser} ${teacherChatBubble}`, {
-  background: 'var(--lumin-indigo)',
-  color: '#ffffff',
-  borderBottomRightRadius: 'var(--space-1)',
+  background: "var(--lumin-indigo)",
+  color: "#ffffff",
+  borderBottomRightRadius: "var(--space-1)",
 });
 
 // index.css L833-838 (`.teacher-chat-message.assistant .teacher-chat-bubble`).
 globalStyle(`${teacherChatMessage}${messageAssistant} ${teacherChatBubble}`, {
-  background: 'var(--lumin-canvas)',
-  color: 'var(--lumin-ink)',
-  border: '1px solid var(--lumin-border)',
-  borderBottomLeftRadius: 'var(--space-1)',
+  background: "var(--lumin-canvas)",
+  color: "var(--lumin-ink)",
+  border: "1px solid var(--lumin-border)",
+  borderBottomLeftRadius: "var(--space-1)",
 });
 
 // index.css L840-846 + ::before L848-856 (spinner via the keyframes() ref;
 // 0.8s linear infinite verbatim) + rm ::before kill L1001-1003.
 export const teacherChatThinking = style({
-  display: 'flex',
-  alignItems: 'center',
-  gap: 'var(--space-2)',
-  color: 'var(--lumin-muted)',
-  fontSize: '0.9375rem',
+  display: "flex",
+  alignItems: "center",
+  gap: "var(--space-2)",
+  color: "var(--lumin-muted)",
+  fontSize: "0.9375rem",
   selectors: {
-    '&::before': {
+    "&::before": {
       content: '""',
-      width: '14px',
-      height: '14px',
-      border: '2px solid var(--lumin-border)',
-      borderTopColor: 'var(--lumin-indigo)',
-      borderRadius: '50%',
+      width: "14px",
+      height: "14px",
+      border: "2px solid var(--lumin-border)",
+      borderTopColor: "var(--lumin-indigo)",
+      borderRadius: "50%",
       animationName: spin,
-      animationDuration: '0.8s',
-      animationTimingFunction: 'linear',
-      animationIterationCount: 'infinite',
+      animationDuration: "0.8s",
+      animationTimingFunction: "linear",
+      animationIterationCount: "infinite",
     },
   },
-  '@media': {
-    '(prefers-reduced-motion: reduce)': {
+  "@media": {
+    "(prefers-reduced-motion: reduce)": {
       selectors: {
-        '&::before': {
-          animation: 'none',
+        "&::before": {
+          animation: "none",
         },
       },
     },
@@ -231,9 +231,9 @@ export const teacherChatThinking = style({
 
 // index.css L864-868.
 export const teacherChatSuggestions = style({
-  display: 'flex',
-  flexWrap: 'wrap',
-  gap: 'var(--space-2)',
+  display: "flex",
+  flexWrap: "wrap",
+  gap: "var(--space-2)",
 });
 
 // index.css L870-880 + :hover:not(:disabled) L882-885 + :active:not(:disabled)
@@ -241,43 +241,44 @@ export const teacherChatSuggestions = style({
 // rm `&:active` form (0,2,0) still loses to `:active:not(:disabled)` (0,3,0),
 // so the :active scale survives exactly like the source cascade.
 export const teacherChatChip = style({
-  padding: 'var(--space-2) var(--space-3)',
-  fontSize: '0.875rem',
-  fontWeight: '500',
-  color: 'var(--lumin-indigo)',
-  background: 'var(--lumin-card)',
-  border: '1px solid var(--lumin-border)',
-  borderRadius: '9999px',
-  cursor: 'pointer',
-  transition: 'background 0.2s ease, border-color 0.2s ease, transform 0.2s ease',
-  ':disabled': {
-    opacity: '0.5',
-    cursor: 'not-allowed',
+  padding: "var(--space-2) var(--space-3)",
+  fontSize: "0.875rem",
+  fontWeight: "500",
+  color: "var(--lumin-indigo)",
+  background: "var(--lumin-card)",
+  border: "1px solid var(--lumin-border)",
+  borderRadius: "9999px",
+  cursor: "pointer",
+  transition:
+    "background 0.2s ease, border-color 0.2s ease, transform 0.2s ease",
+  ":disabled": {
+    opacity: "0.5",
+    cursor: "not-allowed",
   },
   selectors: {
-    '&:hover:not(:disabled)': {
-      background: 'var(--lumin-indigo-soft)',
-      borderColor: 'var(--lumin-indigo)',
+    "&:hover:not(:disabled)": {
+      background: "var(--lumin-indigo-soft)",
+      borderColor: "var(--lumin-indigo)",
     },
-    '&:active:not(:disabled)': {
-      transform: 'scale(0.98)',
+    "&:active:not(:disabled)": {
+      transform: "scale(0.98)",
     },
   },
-  '@media': {
-    '(prefers-reduced-motion: reduce)': {
-      transition: 'none',
-      transform: 'none',
-      animation: 'none',
+  "@media": {
+    "(prefers-reduced-motion: reduce)": {
+      transition: "none",
+      transform: "none",
+      animation: "none",
       selectors: {
-        '&:hover': {
-          transition: 'none',
-          transform: 'none',
-          animation: 'none',
+        "&:hover": {
+          transition: "none",
+          transform: "none",
+          animation: "none",
         },
-        '&:active': {
-          transition: 'none',
-          transform: 'none',
-          animation: 'none',
+        "&:active": {
+          transition: "none",
+          transform: "none",
+          animation: "none",
         },
       },
     },
@@ -286,30 +287,30 @@ export const teacherChatChip = style({
 
 // index.css L896-905.
 export const teacherChatComposer = style({
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 'var(--space-3)',
-  padding: 'var(--space-4)',
-  background: 'var(--lumin-card)',
-  border: '1px solid var(--lumin-border)',
-  borderRadius: 'var(--radius-lg)',
-  boxShadow: 'var(--shadow-sm)',
+  display: "flex",
+  flexDirection: "column",
+  gap: "var(--space-3)",
+  padding: "var(--space-4)",
+  background: "var(--lumin-card)",
+  border: "1px solid var(--lumin-border)",
+  borderRadius: "var(--radius-lg)",
+  boxShadow: "var(--shadow-sm)",
 });
 
 // index.css L907-913.
 export const teacherChatError = style({
-  padding: 'var(--space-3) var(--space-4)',
-  background: '#fff1f2',
-  color: 'var(--lumin-error)',
-  borderRadius: 'var(--radius-md)',
-  fontSize: '0.875rem',
+  padding: "var(--space-3) var(--space-4)",
+  background: "#fff1f2",
+  color: "var(--lumin-error)",
+  borderRadius: "var(--radius-md)",
+  fontSize: "0.875rem",
 });
 
 // index.css L915-919.
 export const teacherChatInputRow = style({
-  display: 'flex',
-  alignItems: 'flex-end',
-  gap: 'var(--space-3)',
+  display: "flex",
+  alignItems: "flex-end",
+  gap: "var(--space-3)",
 });
 
 // index.css L921-935 + :focus L937-940 + :disabled L942-945 + rm group
@@ -323,37 +324,37 @@ export const teacherChatInputRow = style({
 // injection down the wrong branch, and the compiler then fails with "Styles
 // were unable to be assigned to a file".
 export const teacherChatInput = style({
-  flex: '1',
-  resize: 'none',
-  minHeight: '48px',
-  maxHeight: '160px',
-  padding: 'var(--space-3) var(--space-4)',
-  fontSize: '1rem',
-  lineHeight: '1.5',
-  color: 'var(--lumin-ink)',
-  background: 'var(--lumin-canvas)',
-  border: '1px solid var(--lumin-border)',
-  borderRadius: 'var(--radius-md)',
-  outline: 'none',
-  transition: 'border-color 0.2s ease, box-shadow 0.2s ease',
-  ':focus': {
-    borderColor: 'var(--lumin-indigo)',
-    boxShadow: '0 0 0 3px var(--lumin-indigo-soft)',
+  flex: "1",
+  resize: "none",
+  minHeight: "48px",
+  maxHeight: "160px",
+  padding: "var(--space-3) var(--space-4)",
+  fontSize: "1rem",
+  lineHeight: "1.5",
+  color: "var(--lumin-ink)",
+  background: "var(--lumin-canvas)",
+  border: "1px solid var(--lumin-border)",
+  borderRadius: "var(--radius-md)",
+  outline: "none",
+  transition: "border-color 0.2s ease, box-shadow 0.2s ease",
+  ":focus": {
+    borderColor: "var(--lumin-indigo)",
+    boxShadow: "0 0 0 3px var(--lumin-indigo-soft)",
   },
-  ':disabled': {
-    background: '#f3f4f6',
-    cursor: 'not-allowed',
+  ":disabled": {
+    background: "#f3f4f6",
+    cursor: "not-allowed",
   },
-  '@media': {
-    '(prefers-reduced-motion: reduce)': {
-      transition: 'none',
-      transform: 'none',
-      animation: 'none',
+  "@media": {
+    "(prefers-reduced-motion: reduce)": {
+      transition: "none",
+      transform: "none",
+      animation: "none",
       selectors: {
-        '&:focus': {
-          transition: 'none',
-          transform: 'none',
-          animation: 'none',
+        "&:focus": {
+          transition: "none",
+          transform: "none",
+          animation: "none",
         },
       },
     },
@@ -363,45 +364,45 @@ export const teacherChatInput = style({
 // index.css L947-960 + :hover:not(:disabled) L962-964 + :active:not(:disabled)
 // L966-968 + :disabled L970-973 + rm group L991-993.
 export const teacherChatSend = style({
-  display: 'inline-flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  width: '48px',
-  height: '48px',
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  width: "48px",
+  height: "48px",
   flexShrink: 0,
-  color: '#ffffff',
-  background: 'var(--lumin-indigo)',
-  border: 'none',
-  borderRadius: '50%',
-  cursor: 'pointer',
-  transition: 'background 0.2s ease, transform 0.2s ease, opacity 0.2s ease',
-  ':disabled': {
-    opacity: '0.45',
-    cursor: 'not-allowed',
+  color: "#ffffff",
+  background: "var(--lumin-indigo)",
+  border: "none",
+  borderRadius: "50%",
+  cursor: "pointer",
+  transition: "background 0.2s ease, transform 0.2s ease, opacity 0.2s ease",
+  ":disabled": {
+    opacity: "0.45",
+    cursor: "not-allowed",
   },
   selectors: {
-    '&:hover:not(:disabled)': {
-      background: '#4338ca',
+    "&:hover:not(:disabled)": {
+      background: "#4338ca",
     },
-    '&:active:not(:disabled)': {
-      transform: 'scale(0.96)',
+    "&:active:not(:disabled)": {
+      transform: "scale(0.96)",
     },
   },
-  '@media': {
-    '(prefers-reduced-motion: reduce)': {
-      transition: 'none',
-      transform: 'none',
-      animation: 'none',
+  "@media": {
+    "(prefers-reduced-motion: reduce)": {
+      transition: "none",
+      transform: "none",
+      animation: "none",
       selectors: {
-        '&:hover': {
-          transition: 'none',
-          transform: 'none',
-          animation: 'none',
+        "&:hover": {
+          transition: "none",
+          transform: "none",
+          animation: "none",
         },
-        '&:active': {
-          transition: 'none',
-          transform: 'none',
-          animation: 'none',
+        "&:active": {
+          transition: "none",
+          transform: "none",
+          animation: "none",
         },
       },
     },
@@ -410,14 +411,14 @@ export const teacherChatSend = style({
 
 // index.css L975-978 (`.teacher-chat-send svg`, unclassed svg).
 globalStyle(`${teacherChatSend} svg`, {
-  width: '20px',
-  height: '20px',
+  width: "20px",
+  height: "20px",
 });
 
 // index.css L980-985.
 export const teacherChatFooterNote = style({
-  margin: '0',
-  fontSize: '0.75rem',
-  color: 'var(--lumin-muted)',
-  textAlign: 'center',
+  margin: "0",
+  fontSize: "0.75rem",
+  color: "var(--lumin-muted)",
+  textAlign: "center",
 });

@@ -1,14 +1,12 @@
-import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import { RoleSelection } from "../RoleSelection";
 
 describe("RoleSelection", () => {
   it("renders app title and tagline", () => {
     render(<RoleSelection onSelect={() => {}} />);
     expect(screen.getByText("Lumin")).toBeDefined();
-    expect(
-      screen.getByText("理解を照らし、次の学びにつなげる")
-    ).toBeDefined();
+    expect(screen.getByText("理解を照らし、次の学びにつなげる")).toBeDefined();
   });
 
   it("renders three role buttons", () => {

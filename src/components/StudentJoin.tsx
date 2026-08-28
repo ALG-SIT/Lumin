@@ -1,27 +1,27 @@
-import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { useEffect, useState } from "react";
 import { baseInputFocus } from "../styles/global.css.ts";
 import { errorMessage, privacyNote } from "../styles/shared.css.ts";
 import {
-  studentJoin,
-  joinHeader,
-  joinTitle,
-  joinReset,
-  joinSubtitle,
-  joinCard,
-  joinStatus,
-  sectionLabel,
-  teacherSection,
-  teacherList,
-  teacherCard,
-  teacherInfo,
-  teacherName,
-  teacherMeta,
-  manualJoin,
-  manualFields,
-  manualInput,
   codeInput,
   joinButton,
+  joinCard,
+  joinHeader,
+  joinReset,
+  joinStatus,
+  joinSubtitle,
+  joinTitle,
+  manualFields,
+  manualInput,
+  manualJoin,
+  sectionLabel,
+  studentJoin,
+  teacherCard,
+  teacherInfo,
+  teacherList,
+  teacherMeta,
+  teacherName,
+  teacherSection,
 } from "./StudentJoin.css.ts";
 
 export interface DiscoveredTeacher {
@@ -106,9 +106,7 @@ export function StudentJoin({ onJoined, onReset }: StudentJoinProps) {
         </button>
       </div>
 
-      <p className={joinSubtitle}>
-        同じWi-Fiにいる先生を探しています…
-      </p>
+      <p className={joinSubtitle}>同じWi-Fiにいる先生を探しています…</p>
 
       <div className={joinCard}>
         {isBrowsing && teachers.length === 0 && (
@@ -176,9 +174,7 @@ export function StudentJoin({ onJoined, onReset }: StudentJoinProps) {
               autoComplete="one-time-code"
               placeholder="4桁の参加コード"
               value={joinCode}
-              onChange={(e) =>
-                setJoinCode(filteredJoinCode(e.target.value))
-              }
+              onChange={(e) => setJoinCode(filteredJoinCode(e.target.value))}
               maxLength={4}
             />
           </div>

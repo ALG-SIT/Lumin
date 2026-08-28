@@ -1,6 +1,13 @@
 // @vitest-environment jsdom
+
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { DemoFlow } from "../DemoFlow";
 
 const invokeMock = vi.fn();
@@ -40,9 +47,7 @@ describe("DemoFlow", () => {
   it("非Tauri環境では開始ボタンを提示せずデスクトップアプリ用の案内を出す", () => {
     render(<DemoFlow />);
     // 開始ボタン自体が存在しない(IPCを持たない環境での誤実行を排除)
-    expect(
-      screen.queryByRole("button", { name: "デモを始める" })
-    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "デモを始める" })).toBeNull();
     expect(screen.getByText(/bun run tauri dev/)).toBeDefined();
     expect(invokeMock).not.toHaveBeenCalled();
   });
@@ -70,7 +75,7 @@ describe("DemoFlow", () => {
       // 実データが画面に描画されていること
       expect(screen.getByText("8名")).toBeDefined();
       expect(
-        screen.getByText("「傾きと切片の混同」を解きほぐす")
+        screen.getByText("「傾きと切片の混同」を解きほぐす"),
       ).toBeDefined();
     } finally {
       vi.useRealTimers();
@@ -85,8 +90,6 @@ describe("DemoFlow", () => {
     await waitFor(() => {
       expect(screen.getByText(/boom: start_demo_session/)).toBeDefined();
     });
-    expect(
-      screen.getByRole("button", { name: "もう一度試す" })
-    ).toBeDefined();
+    expect(screen.getByRole("button", { name: "もう一度試す" })).toBeDefined();
   });
 });

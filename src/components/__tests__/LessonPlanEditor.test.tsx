@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LessonPlanEditor } from "../LessonPlanEditor";
 
 vi.mock("@tauri-apps/api/core", () => ({
@@ -36,7 +36,9 @@ describe("LessonPlanEditor", () => {
   });
 
   it("renders all editable fields", () => {
-    render(<LessonPlanEditor classSummary={mockSummary} onAdopted={() => {}} />);
+    render(
+      <LessonPlanEditor classSummary={mockSummary} onAdopted={() => {}} />,
+    );
     expect(screen.getByText("学習の焦点")).toBeDefined();
     expect(screen.getByText("授業の展開（4段階）")).toBeDefined();
     expect(screen.getByText("確認質問")).toBeDefined();
@@ -44,14 +46,18 @@ describe("LessonPlanEditor", () => {
   });
 
   it("renders AI regenerate and adopt buttons", () => {
-    render(<LessonPlanEditor classSummary={mockSummary} onAdopted={() => {}} />);
+    render(
+      <LessonPlanEditor classSummary={mockSummary} onAdopted={() => {}} />,
+    );
     expect(screen.getByText("AIで再生成")).toBeDefined();
     expect(screen.getByText("この案を採用")).toBeDefined();
   });
 
   it("calls onAdopted when adopt button is clicked", async () => {
     const onAdopted = vi.fn();
-    render(<LessonPlanEditor classSummary={mockSummary} onAdopted={onAdopted} />);
+    render(
+      <LessonPlanEditor classSummary={mockSummary} onAdopted={onAdopted} />,
+    );
     fireEvent.click(screen.getByText("この案を採用"));
     await vi.waitFor(() => {
       expect(onAdopted).toHaveBeenCalled();
