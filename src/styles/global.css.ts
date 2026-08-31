@@ -66,7 +66,8 @@ globalStyle("html, body, #root", {
 });
 
 globalStyle("body", {
-  fontFamily: "'Noto Sans JP', Inter, Avenir, system-ui, sans-serif",
+  fontFamily:
+    "'Noto Sans JP Variable', -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', sans-serif",
   background: "var(--lumin-bg)",
   color: "var(--lumin-text)",
   minHeight: "100vh",

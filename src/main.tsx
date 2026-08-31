@@ -1,5 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
+import "@fontsource-variable/noto-sans-jp/wght.css";
 import "./styles/global.css.ts";
 import App from "./App";
 
