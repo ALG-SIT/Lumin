@@ -3,6 +3,7 @@
 //! Download specs, on-disk layout, and the inference wiring are all derived
 //! from [`VARIANTS`], so adding a model means adding one entry here.
 
+use super::tokenizer::ChatFormat;
 use std::path::{Path, PathBuf};
 
 /// How a variant's ONNX graphs have to be driven during generation.
@@ -44,6 +45,9 @@ pub struct Variant {
     pub description: &'static str,
     pub repo: &'static str,
     pub architecture: Architecture,
+    /// Turn markers this variant was instruction-tuned with. Families are not
+    /// interchangeable; see [`ChatFormat`].
+    pub chat_format: ChatFormat,
     /// Subdirectory under the model root, or `""` to use the root itself.
     ///
     /// Variants that ship external data under generic upstream names (every
@@ -130,6 +134,7 @@ pub static VARIANTS: &[Variant] = &[
         description: "軽量・高速。まず試すならこれ。",
         repo: "onnx-community/gemma-3-1b-it-ONNX",
         architecture: Architecture::DecoderOnly,
+        chat_format: ChatFormat::GemmaTurn,
         // Installed before per-variant directories existed; kept flat so
         // existing installs keep working without a migration.
         dir_name: "",
@@ -170,6 +175,7 @@ pub static VARIANTS: &[Variant] = &[
         description: "INT4 が不安定な環境向けのフォールバック。",
         repo: "onnx-community/gemma-3-1b-it-ONNX",
         architecture: Architecture::DecoderOnly,
+        chat_format: ChatFormat::GemmaTurn,
         dir_name: "",
         decoder_file: "gemma-3-1b-it-int8.onnx",
         embed_file: None,
@@ -201,6 +207,7 @@ pub static VARIANTS: &[Variant] = &[
         description: "モバイル最適化 (PLE + MatFormer)。",
         repo: "onnx-community/gemma-3n-E2B-it-ONNX",
         architecture: Architecture::EmbedChained,
+        chat_format: ChatFormat::GemmaTurn,
         // Its tokenizer differs from Gemma 3's while sharing the filename, so
         // a flat layout would have the two variants clobber each other.
         dir_name: "gemma-3n-e2b-int4",
@@ -261,6 +268,7 @@ pub static VARIANTS: &[Variant] = &[
         description: "Gemma 4 の軽量版。教室端末での常用を想定。",
         repo: "onnx-community/gemma-4-E2B-it-ONNX",
         architecture: Architecture::EmbedChained,
+        chat_format: ChatFormat::Gemma4Turn,
         dir_name: "gemma-4-e2b-int4",
         decoder_file: "decoder_model_merged_q4.onnx",
         embed_file: Some("embed_tokens_q4.onnx"),
@@ -315,6 +323,7 @@ pub static VARIANTS: &[Variant] = &[
         description: "Gemma 4 の高精度版。メモリに余裕のある教師端末向け。",
         repo: "onnx-community/gemma-4-E4B-it-ONNX",
         architecture: Architecture::EmbedChained,
+        chat_format: ChatFormat::Gemma4Turn,
         dir_name: "gemma-4-e4b-int4",
         decoder_file: "decoder_model_merged_q4.onnx",
         embed_file: Some("embed_tokens_q4.onnx"),

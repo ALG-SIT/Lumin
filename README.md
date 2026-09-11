@@ -184,6 +184,28 @@ React フロントエンドは Tauri の `invoke` で Rust コマンドを呼び
 
 Gemma 3 1B は `input_ids` を直接受け取る単一グラフですが、Gemma 3n と Gemma 4 は `embed_tokens` グラフが出力する `inputs_embeds` と `per_layer_inputs` をデコーダへ渡す 2 段構成です。KV キャッシュの層数とヘッド次元はモデルごとに異なる（Gemma 4 は共有 KV 層が露出せず、スライディング窓層だけ次元が倍）ため、定数ではなく ONNX グラフの入力定義から実行時に読み取ります。
 
+チャットテンプレートはファミリーごとに異なり、互換性はありません。Gemma 3 / 3n は `<start_of_turn>` / `<end_of_turn>`、Gemma 4 は `<|turn>` / `<turn|>` を使います。誤ったほうを渡すとマーカーが特殊トークンではなく通常の文字列として扱われ、モデルが応答にマーカーをそのまま書き出します。
+
+KV キャッシュの先頭には、常にマスクされるゼロ埋めの 1 スロットを置いています。初回ステップでキャッシュが空だと `past_key_values.*` が要素数 0 のテンソルになり、ONNX Runtime の CoreML プロバイダがこれを拒否するためです（マスク済みのキーは softmax 後に寄与しないので出力は変わりません）。
+
+### 実機での確認
+
+Apple M5 / 16 GB / macOS（CoreML）で実推論を確認しています。
+
+| モデル | 生成 | 所要（モデル読み込み含む） |
+| --- | --- | --- |
+| Gemma 3 1B INT4 | 8 トークン | 6.7 秒 |
+| Gemma 4 E2B INT4 | 8 トークン | 13.9 秒 |
+| Gemma 4 E2B INT4 | 64 トークン | 28.5 秒 |
+
+Gemma 4 E4B は未検証です（16 GB 機では推奨メモリに届かないため）。実推論のスモークテストは `#[ignore]` 付きで、モデルを配置したうえで次のように実行します。
+
+```bash
+bun run download:model --variant 4-e2b-int4
+cargo test --manifest-path src-tauri/Cargo.toml --release \
+  gemma4_e2b_long_generation_smoke -- --ignored --nocapture
+```
+
 実行プロバイダは Cargo feature で切り替えます。Apple Silicon の macOS ビルドでは CoreML が既定で有効で、未対応ノードは ONNX Runtime の CPU プロバイダへフォールバックします。
 
 ```bash

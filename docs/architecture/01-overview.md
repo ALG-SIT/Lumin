@@ -164,6 +164,17 @@ hardcoded: Gemma 4 hides its shared-KV layers (E2B exposes 15 cache entries for
 35 layers, E4B 24 for 42) and gives sliding-window layers twice the head dim of
 full-attention layers.
 
+Chat templates are per-family and not interchangeable: Gemma 3 / 3n use
+`<start_of_turn>` / `<end_of_turn>`, Gemma 4 uses `<|turn>` / `<turn|>`. Passing
+the wrong pair tokenizes the markers as ordinary text, so the model never sees a
+turn boundary and echoes them back in its reply.
+
+The KV cache always carries one leading zero-filled position that
+`attention_mask` masks out. Without it the first step would pass zero-element
+`past_key_values.*` tensors, which ONNX Runtime's CoreML provider rejects.
+Masked keys contribute nothing after the attention softmax, so output is
+unchanged.
+
 Gemma 3n and Gemma 4 are installed into per-variant subdirectories
 (`models/gemma-4-e2b-int4/` and so on). Their external-data files all share
 generic upstream names such as `decoder_model_merged_q4.onnx_data`, and the

@@ -6,11 +6,7 @@ use std::time::{Duration, Instant};
 
 use super::catalog::Architecture;
 use super::session::{has_input, kv_layer_specs, AppState, KvLayerSpec};
-use super::tokenizer::{apply_gemma_chat_template, load_tokenizer, mock_detokenize};
-
-/// Token ids that end a turn across the Gemma families Lumin supports:
-/// `<eos>` (1), `<end_of_turn>` (106), and Gemma 4's additional stop id 50.
-const EOS_TOKEN_IDS: &[i64] = &[1, 106, 50];
+use super::tokenizer::{load_tokenizer, mock_detokenize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GenerateOptions {
@@ -35,9 +31,10 @@ pub struct GenerateResult {
 /// Core generation - if model not present, returns mock response for pipeline validation
 pub async fn generate_text(state: &AppState, opts: GenerateOptions) -> Result<GenerateResult> {
     let max_tokens = opts.max_tokens.unwrap_or(128).min(512);
+    let variant = state.active_variant().await;
     let use_template = opts.use_chat_template.unwrap_or(true);
     let prompt = if use_template {
-        apply_gemma_chat_template(&opts.prompt)
+        variant.chat_format.apply(&opts.prompt)
     } else {
         opts.prompt.clone()
     };
@@ -45,7 +42,6 @@ pub async fn generate_text(state: &AppState, opts: GenerateOptions) -> Result<Ge
     // Mock path when the selected model is not fully installed - allows UI
     // validation without a multi-gigabyte download.
     if !state.active_model_ready().await {
-        let variant = state.active_variant().await;
         return Ok(mock_generate(
             &opts.prompt,
             max_tokens,
@@ -135,16 +131,31 @@ fn embed_tokens(embed: &mut Session, ids: &[i64]) -> Result<Embeddings> {
     })
 }
 
+/// Zero-filled cache positions prepended to the KV cache and masked out for
+/// the whole generation.
+///
+/// On the first step the cache is empty, which would make every
+/// `past_key_values.*` input a zero-element tensor. ONNX Runtime's CoreML
+/// provider rejects that outright ("has a dynamic shape ... but the runtime
+/// shape has zero elements"), so the cache instead starts with one padded
+/// position that `attention_mask` masks off. Masked keys contribute nothing
+/// after the attention softmax, so the output is unchanged.
+const CACHE_PAD: usize = 1;
+
 /// Build the decoder's inputs for one step, supplying only what the graph
 /// declares. Gemma 3 takes `input_ids`; Gemma 3n/4 take `inputs_embeds` plus
 /// `per_layer_inputs`, `position_ids` and `num_logits_to_keep`.
+///
+/// `cache_len` counts the padded positions; `position` is the index of the
+/// first real token in the sequence and so excludes them.
 fn build_decoder_inputs(
     decoder: &Session,
     kv_specs: &[KvLayerSpec],
     token_ids: &[i64],
     embeddings: Option<&Embeddings>,
     cache: &Option<Vec<(Vec<f32>, Vec<f32>)>>,
-    past_len: usize,
+    cache_len: usize,
+    position: usize,
 ) -> Result<Vec<(String, SessionInputValue<'static>)>> {
     let seq_len = token_ids.len();
     let mut inputs: Vec<(String, SessionInputValue)> = Vec::new();
@@ -177,14 +188,19 @@ fn build_decoder_inputs(
     }
 
     if has_input(decoder, "attention_mask") {
-        let attention_len = past_len + seq_len;
-        let t = Tensor::from_array(([1, attention_len], vec![1i64; attention_len]))
+        let attention_len = cache_len + seq_len;
+        // The leading padded positions stay masked for the whole generation.
+        let mut mask = vec![1i64; attention_len];
+        for slot in mask.iter_mut().take(CACHE_PAD.min(attention_len)) {
+            *slot = 0;
+        }
+        let t = Tensor::from_array(([1, attention_len], mask))
             .map_err(|e| anyhow::anyhow!("attention_mask tensor error: {e}"))?;
         inputs.push(("attention_mask".to_string(), t.into()));
     }
 
     if has_input(decoder, "position_ids") {
-        let positions: Vec<i64> = (past_len..past_len + seq_len).map(|p| p as i64).collect();
+        let positions: Vec<i64> = (position..position + seq_len).map(|p| p as i64).collect();
         let t = Tensor::from_array(([1, seq_len], positions))
             .map_err(|e| anyhow::anyhow!("position_ids tensor error: {e}"))?;
         inputs.push(("position_ids".to_string(), t.into()));
@@ -200,9 +216,13 @@ fn build_decoder_inputs(
     for (slot, spec) in kv_specs.iter().enumerate() {
         let (key, value) = match cache {
             Some(layers) => layers[slot].clone(),
-            None => (Vec::new(), Vec::new()),
+            // First step: the cache is nothing but the masked padding.
+            None => {
+                let zeros = vec![0f32; spec.num_heads * cache_len * spec.head_dim];
+                (zeros.clone(), zeros)
+            }
         };
-        let shape = [1, spec.num_heads, past_len, spec.head_dim];
+        let shape = [1, spec.num_heads, cache_len, spec.head_dim];
         let key_tensor = Tensor::<f32>::from_array((shape, key))
             .map_err(|e| anyhow::anyhow!("past key tensor error: {e}"))?;
         let value_tensor = Tensor::<f32>::from_array((shape, value))
@@ -273,11 +293,15 @@ async fn try_real_inference(
 
     let session = guard.as_mut().unwrap();
     let kv_specs = kv_layer_specs(&session.session);
+    let eos_token_ids = variant.chat_format.eos_token_ids();
 
     let mut generated_ids: Vec<i64> = Vec::new();
     let mut current_ids = input_ids.clone();
     let mut cache: Option<Vec<(Vec<f32>, Vec<f32>)>> = None;
-    let mut past_len = 0usize;
+    // Length of the KV cache including the masked padding, and the position of
+    // the next real token (which the padding must not shift).
+    let mut cache_len = CACHE_PAD;
+    let mut position = 0usize;
     let mut decode_stream = emit.map(|_| tokenizer.inner().decode_stream(true));
 
     for _ in 0..max_tokens {
@@ -292,7 +316,8 @@ async fn try_real_inference(
             &current_ids,
             embeddings.as_ref(),
             &cache,
-            past_len,
+            cache_len,
+            position,
         )?;
 
         let outputs = session
@@ -315,7 +340,8 @@ async fn try_real_inference(
         let last_logits = &data[last_offset..last_offset + vocab];
         let next_id = argmax(last_logits) as i64;
 
-        past_len += current_ids.len();
+        cache_len += current_ids.len();
+        position += current_ids.len();
 
         let mut next_cache = Vec::with_capacity(kv_specs.len());
         for spec in &kv_specs {
@@ -329,7 +355,7 @@ async fn try_real_inference(
         }
         cache = Some(next_cache);
 
-        if EOS_TOKEN_IDS.contains(&next_id) {
+        if eos_token_ids.contains(&next_id) {
             break;
         }
 
@@ -405,7 +431,7 @@ pub async fn generate_stream(
     }
 
     let prompt = if opts.use_chat_template.unwrap_or(true) {
-        apply_gemma_chat_template(&opts.prompt)
+        state.active_variant().await.chat_format.apply(&opts.prompt)
     } else {
         opts.prompt.clone()
     };
@@ -417,10 +443,14 @@ mod tests {
     use super::*;
     use std::sync::{Arc, Mutex};
 
+    /// Every smoke test pins its variant: the active model is a persisted
+    /// setting, so relying on the default would make the result depend on
+    /// whatever ran last.
     #[tokio::test]
     #[ignore]
     async fn real_inference_smoke() {
         let state = AppState::new(std::path::PathBuf::from("../models"));
+        state.set_active_variant("1b-int4").await.unwrap();
         let opts = GenerateOptions {
             prompt: "こんにちは".to_string(),
             max_tokens: Some(8),
@@ -429,6 +459,10 @@ mod tests {
         };
 
         let result = generate_text(&state, opts).await.expect("real inference");
+        println!(
+            "[gemma3-1b] {} tok in {} ms\n{}",
+            result.generated_tokens, result.latency_ms, result.text
+        );
         assert!(!result.is_mock);
         assert!(!result.text.is_empty());
     }
@@ -437,6 +471,7 @@ mod tests {
     #[ignore]
     async fn real_streaming_inference_smoke() {
         let state = AppState::new(std::path::PathBuf::from("../models"));
+        state.set_active_variant("1b-int4").await.unwrap();
         let opts = GenerateOptions {
             prompt: "こんにちは".to_string(),
             max_tokens: Some(8),
@@ -476,6 +511,52 @@ mod tests {
         gemma4_smoke("4-e4b-int4").await;
     }
 
+    /// Longer run over the real classroom prompt shape. Eight tokens barely
+    /// touch the KV cache; a cache that is mis-shaped or mis-ordered produces
+    /// text that only degenerates after several steps, so this generates
+    /// enough tokens for that to show up.
+    #[tokio::test]
+    #[ignore]
+    async fn gemma4_e2b_long_generation_smoke() {
+        let state = AppState::new(std::path::PathBuf::from("../models"));
+        state.set_active_variant("4-e2b-int4").await.unwrap();
+        assert!(
+            state.active_model_ready().await,
+            "4-e2b-int4 is not installed"
+        );
+
+        let result = generate_text(
+            &state,
+            GenerateOptions {
+                prompt: "中学生に「一次関数の傾き」を、答えを言わずに気づかせるヒントを1つ考えてください。"
+                    .to_string(),
+                max_tokens: Some(64),
+                temperature: None,
+                use_chat_template: Some(true),
+            },
+        )
+        .await
+        .expect("real inference");
+
+        println!(
+            "[4-e2b-int4 long] {} tok in {} ms\n{}",
+            result.generated_tokens, result.latency_ms, result.text
+        );
+
+        assert!(!result.is_mock);
+        assert!(result.generated_tokens >= 16, "stopped far too early");
+
+        // A broken cache typically collapses into one repeated token.
+        let chars: Vec<char> = result.text.chars().collect();
+        let distinct = chars.iter().collect::<std::collections::HashSet<_>>().len();
+        assert!(
+            distinct > chars.len() / 4,
+            "output looks degenerate ({distinct} distinct of {} chars): {}",
+            chars.len(),
+            result.text
+        );
+    }
+
     async fn gemma4_smoke(variant: &str) {
         let state = AppState::new(std::path::PathBuf::from("../models"));
         state
@@ -498,6 +579,11 @@ mod tests {
         )
         .await
         .expect("real inference");
+
+        println!(
+            "[{variant}] {} tok in {} ms ({:.1} tok/s)\n{}",
+            result.generated_tokens, result.latency_ms, result.tokens_per_sec, result.text
+        );
 
         assert!(!result.is_mock);
         assert!(!result.text.is_empty());
