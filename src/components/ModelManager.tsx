@@ -54,7 +54,6 @@ export function ModelManager() {
     try {
       const entries = await invoke<ModelEntry[]>("list_models");
       setModels(entries);
-      setError(null);
     } catch (err) {
       setError(`モデル一覧の取得に失敗しました: ${err}`);
     }
@@ -65,6 +64,7 @@ export function ModelManager() {
   }, [loadModels]);
 
   useEffect(() => {
+    let cancelled = false;
     let unlistenProgress: (() => void) | undefined;
     let unlistenComplete: (() => void) | undefined;
 
@@ -79,16 +79,25 @@ export function ModelManager() {
         },
       );
 
+      if (cancelled) {
+        unlistenProgress();
+        return;
+      }
+
       unlistenComplete = await listen<unknown>("download-complete", () => {
         setDownloadingVariant(null);
         setProgress({});
         loadModels();
       });
+      if (cancelled) unlistenComplete();
     };
 
-    setupListeners();
+    void setupListeners().catch((err) => {
+      if (!cancelled) setError(`進捗の取得に失敗しました: ${err}`);
+    });
 
     return () => {
+      cancelled = true;
       if (unlistenProgress) unlistenProgress();
       if (unlistenComplete) unlistenComplete();
     };

@@ -31,6 +31,7 @@ function SunIcon(props: React.SVGProps<SVGSVGElement>) {
 
 export default function App() {
   const [role, setRole] = useState<Role>(null);
+  const [teacherVisited, setTeacherVisited] = useState(false);
   const [studentJoined, setStudentJoined] = useState(false);
   const [studentSessionId, setStudentSessionId] = useState("");
   const [participantToken, setParticipantToken] = useState<string | null>(null);
@@ -46,6 +47,8 @@ export default function App() {
   const handleStudentReset = () => {
     setStudentJoined(false);
     setStudentSessionId("");
+    setParticipantToken(null);
+    setJoinedQuiz(null);
     setRole(null);
   };
 
@@ -64,7 +67,7 @@ export default function App() {
             <button
               type="button"
               className={resetButton}
-              onClick={() => setRole(null)}
+              onClick={handleStudentReset}
             >
               役割を切り替える
             </button>
@@ -72,9 +75,18 @@ export default function App() {
         )}
       </header>
       <main>
-        {!role && <RoleSelection onSelect={setRole} />}
-        {role === "teacher" && (
-          <TeacherDashboard onReset={() => setRole(null)} />
+        {!role && (
+          <RoleSelection
+            onSelect={(next) => {
+              if (next === "teacher") setTeacherVisited(true);
+              setRole(next);
+            }}
+          />
+        )}
+        {teacherVisited && (
+          <div hidden={role !== "teacher"} style={{ height: "100%" }}>
+            <TeacherDashboard onReset={handleStudentReset} />
+          </div>
         )}
         {role === "student" && !studentJoined && (
           <StudentJoin

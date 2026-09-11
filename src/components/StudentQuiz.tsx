@@ -324,7 +324,12 @@ export function StudentQuiz({
           placeholder="答えを入力"
           disabled={isAnalyzing || feedback === "correct"}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && !submitDisabled) {
+            if (
+              e.key === "Enter" &&
+              !e.nativeEvent.isComposing &&
+              e.keyCode !== 229 &&
+              !submitDisabled
+            ) {
               void handleSubmit();
             }
           }}

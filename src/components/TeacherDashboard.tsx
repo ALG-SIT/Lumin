@@ -1,6 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { useCallback, useEffect, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import {
   joinCodeLabel,
   joinCodeValue,
@@ -114,7 +120,21 @@ export function TeacherDashboard({ onReset }: TeacherDashboardProps) {
   const [summary, setSummary] = useState<ClassSummary | null>(null);
   const [events, setEvents] = useState<AnalysisEvent[]>([]);
   const [isLoadingDemo, setIsLoadingDemo] = useState(false);
-  const [activeQuiz] = useState<Quiz | null>(null);
+  const [activeQuiz, setActiveQuiz] = useState<Quiz | null>(null);
+  const [visited, setVisited] = useState<Set<TeacherTab>>(
+    new Set(["dashboard"]),
+  );
+  const contentRef = useRef<HTMLDivElement>(null);
+  const scrollPositions = useRef<Partial<Record<TeacherTab, number>>>({});
+  const changeTab = (next: TeacherTab) => {
+    scrollPositions.current[tab] = contentRef.current?.scrollTop ?? 0;
+    setVisited((previous) => new Set([...previous, next]));
+    setTab(next);
+  };
+  useLayoutEffect(() => {
+    if (contentRef.current)
+      contentRef.current.scrollTop = scrollPositions.current[tab] ?? 0;
+  }, [tab]);
 
   const refreshSummary = useCallback(async () => {
     try {
@@ -173,7 +193,7 @@ export function TeacherDashboard({ onReset }: TeacherDashboardProps) {
                 ? `${sidebarButton} ${sidebarButtonActive}`
                 : sidebarButton
             }
-            onClick={() => setTab(t.id)}
+            onClick={() => changeTab(t.id)}
             aria-current={tab === t.id ? "page" : undefined}
           >
             {t.label}
@@ -186,7 +206,7 @@ export function TeacherDashboard({ onReset }: TeacherDashboardProps) {
         )}
       </nav>
 
-      <div className={teacherContent}>
+      <div className={teacherContent} ref={contentRef}>
         {/* 参加コード常時表示(セッション有効中・全タブ共通) */}
         {sessionCode && (
           <div className={joinCodeBanner} role="status" aria-live="polite">
@@ -197,146 +217,30 @@ export function TeacherDashboard({ onReset }: TeacherDashboardProps) {
           </div>
         )}
 
-        {tab === "dashboard" && (
-          <div className={teacherDashboard}>
-            <div className={teacherDashboardHeader}>
-              <div>
-                <h2 className={teacherDashboardTitle}>クラスの概要</h2>
-                <p className={teacherDashboardSubtitle}>
-                  正答率ではなく、なぜ迷ったかを見ます。
-                </p>
+        <div hidden={tab !== "dashboard"}>
+          {visited.has("dashboard") && (
+            <div className={teacherDashboard}>
+              <div className={teacherDashboardHeader}>
+                <div>
+                  <h2 className={teacherDashboardTitle}>クラスの概要</h2>
+                  <p className={teacherDashboardSubtitle}>
+                    正答率ではなく、なぜ迷ったかを見ます。
+                  </p>
+                </div>
               </div>
-            </div>
 
-            {!hasData ? (
-              <div className={teacherEmptyState}>
-                <div className={teacherEmptyIcon} aria-hidden>
-                  ☀
-                </div>
-                <h3 className={teacherEmptyTitle}>回答を待っています</h3>
-                <p className={teacherEmptyText}>
-                  生徒が回答すると、解答本文を含まない分析結果だけがここに届きます。
-                </p>
-                <button
-                  type="button"
-                  className={primaryButton}
-                  onClick={loadDemoData}
-                  disabled={isLoadingDemo}
-                >
-                  {isLoadingDemo ? "読み込み中…" : "大会デモ用データを読み込む"}
-                </button>
-              </div>
-            ) : (
-              <>
-                <div className={metricGrid}>
-                  <div className={metricCard}>
-                    <span className={metricValue}>
-                      {summary?.participantCount ?? 0}
-                    </span>
-                    <span className={metricLabel}>参加者数</span>
-                    <span className={metricNote}>匿名トークン</span>
+              {!hasData ? (
+                <div className={teacherEmptyState}>
+                  <div className={teacherEmptyIcon} aria-hidden>
+                    ☀
                   </div>
-                  <div className={metricCard}>
-                    <span className={metricValue}>
-                      {((summary?.correctRate ?? 0) * 100).toFixed(0)}%
-                    </span>
-                    <span className={metricLabel}>初回正解率</span>
-                    <span className={metricNote}>
-                      全{summary?.responseCount ?? 0}回答
-                    </span>
-                  </div>
-                  <div className={metricCard}>
-                    <span className={metricValue}>
-                      {((summary?.retrySuccessRate ?? 0) * 100).toFixed(0)}%
-                    </span>
-                    <span className={metricLabel}>リトライ成功率</span>
-                    <span className={metricNote}>ヒント利用後</span>
-                  </div>
-                  <div className={metricCard}>
-                    <span className={metricValue}>
-                      {(summary?.averageHints ?? 0).toFixed(1)}
-                    </span>
-                    <span className={metricLabel}>平均ヒント数</span>
-                    <span className={metricNote}>1回答あたり</span>
-                  </div>
-                </div>
-
-                <div className={`${dashboardCard} misconception-bars`}>
-                  <div className={dashboardCardHeader}>
-                    <div>
-                      <h3 className={dashboardCardTitle}>
-                        よくある誤概念 TOP 5
-                      </h3>
-                      <p className={dashboardCardSubtitle}>
-                        受信した最小化データから集計
-                      </p>
-                    </div>
-                  </div>
-                  {(summary?.misconceptions ?? []).length === 0 ? (
-                    <p className={dashboardEmpty}>
-                      まだ誤概念の集計がありません
-                    </p>
-                  ) : (
-                    (summary?.misconceptions ?? []).slice(0, 5).map((m, i) => (
-                      <div key={m.name} className={barRow}>
-                        <div className={barMeta}>
-                          <span className={barLabel}>{m.name}</span>
-                          <span className={barCount}>
-                            {m.count}件 · {(m.share * 100).toFixed(0)}%
-                          </span>
-                        </div>
-                        <div className={barTrack}>
-                          <div
-                            className={barFill}
-                            style={{
-                              width: `${(m.count / maxMisconceptionCount) * 100}%`,
-                              backgroundColor:
-                                i === 0
-                                  ? "var(--lumin-error)"
-                                  : "var(--lumin-warning)",
-                            }}
-                          />
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-
-                <div className={`${dashboardCard} recent-signals`}>
-                  <h3 className={dashboardCardTitle}>最近のシグナル</h3>
-                  {events.length === 0 ? (
-                    <p className={dashboardEmpty}>まだ信号がありません</p>
-                  ) : (
-                    events
-                      .slice(-10)
-                      .reverse()
-                      .map((e) => (
-                        <div key={e.id} className={signalCard}>
-                          <span
-                            role="img"
-                            className={`${signalBadge} ${e.correct ? signalBadgeCorrect : signalBadgeIncorrect}`}
-                            aria-label={e.correct ? "正解" : "不正解"}
-                          >
-                            {e.correct ? "✓" : "✗"}
-                          </span>
-                          <div className={signalBody}>
-                            <span className={signalConcept}>{e.concept}</span>
-                            <span className={signalMisconception}>
-                              {e.misconception ?? "初回で理解"}
-                            </span>
-                          </div>
-                          <span className={signalToken}>
-                            {e.participantToken}
-                          </span>
-                        </div>
-                      ))
-                  )}
-                </div>
-
-                <div className={demoActions}>
+                  <h3 className={teacherEmptyTitle}>回答を待っています</h3>
+                  <p className={teacherEmptyText}>
+                    生徒が回答すると、解答本文を含まない分析結果だけがここに届きます。
+                  </p>
                   <button
                     type="button"
-                    className={secondaryButton}
+                    className={primaryButton}
                     onClick={loadDemoData}
                     disabled={isLoadingDemo}
                   >
@@ -344,55 +248,187 @@ export function TeacherDashboard({ onReset }: TeacherDashboardProps) {
                       ? "読み込み中…"
                       : "大会デモ用データを読み込む"}
                   </button>
-                  <p className={privacyNote}>
-                    生徒の解答本文や氏名は表示・保存されません
-                  </p>
                 </div>
-              </>
-            )}
-          </div>
-        )}
-        {tab === "session" && (
-          <TeacherSessionControl
-            onSessionStarted={(code) => {
-              setSessionCode(code);
-              setTab("dashboard");
-            }}
-            onSessionEnded={() => setSessionCode(null)}
-          />
-        )}
-        {tab === "lesson" && summary && (
-          <LessonPlanEditor
-            classSummary={{
-              participantCount: summary.participantCount,
-              responseCount: summary.responseCount,
-              correctRate: summary.correctRate,
-              retrySuccessRate: summary.retrySuccessRate,
-              averageHints: summary.averageHints,
-              misconceptions: summary.misconceptions.map((m) => ({
-                concept: m.name,
-                count: m.count,
-              })),
-            }}
-            onAdopted={() => {}}
-          />
-        )}
-        {tab === "lesson" && !summary && (
-          <div className={card}>
-            <p style={{ color: "var(--lumin-text-secondary)" }}>
-              クラスのデータが集まるまでレッスンプランは作成できません。
-            </p>
-          </div>
-        )}
-        {tab === "chat" && (
-          <>
-            <section className="model-manager-panel">
-              <h2>AIモデル管理</h2>
-              <ModelManager />
-            </section>
-            <ChatView classSummary={summary} activeQuiz={activeQuiz} />
-          </>
-        )}
+              ) : (
+                <>
+                  <div className={metricGrid}>
+                    <div className={metricCard}>
+                      <span className={metricValue}>
+                        {summary?.participantCount ?? 0}
+                      </span>
+                      <span className={metricLabel}>参加者数</span>
+                      <span className={metricNote}>匿名トークン</span>
+                    </div>
+                    <div className={metricCard}>
+                      <span className={metricValue}>
+                        {((summary?.correctRate ?? 0) * 100).toFixed(0)}%
+                      </span>
+                      <span className={metricLabel}>初回正解率</span>
+                      <span className={metricNote}>
+                        全{summary?.responseCount ?? 0}回答
+                      </span>
+                    </div>
+                    <div className={metricCard}>
+                      <span className={metricValue}>
+                        {((summary?.retrySuccessRate ?? 0) * 100).toFixed(0)}%
+                      </span>
+                      <span className={metricLabel}>リトライ成功率</span>
+                      <span className={metricNote}>ヒント利用後</span>
+                    </div>
+                    <div className={metricCard}>
+                      <span className={metricValue}>
+                        {(summary?.averageHints ?? 0).toFixed(1)}
+                      </span>
+                      <span className={metricLabel}>平均ヒント数</span>
+                      <span className={metricNote}>1回答あたり</span>
+                    </div>
+                  </div>
+
+                  <div className={`${dashboardCard} misconception-bars`}>
+                    <div className={dashboardCardHeader}>
+                      <div>
+                        <h3 className={dashboardCardTitle}>
+                          よくある誤概念 TOP 5
+                        </h3>
+                        <p className={dashboardCardSubtitle}>
+                          受信した最小化データから集計
+                        </p>
+                      </div>
+                    </div>
+                    {(summary?.misconceptions ?? []).length === 0 ? (
+                      <p className={dashboardEmpty}>
+                        まだ誤概念の集計がありません
+                      </p>
+                    ) : (
+                      (summary?.misconceptions ?? [])
+                        .slice(0, 5)
+                        .map((m, i) => (
+                          <div key={m.name} className={barRow}>
+                            <div className={barMeta}>
+                              <span className={barLabel}>{m.name}</span>
+                              <span className={barCount}>
+                                {m.count}件 · {(m.share * 100).toFixed(0)}%
+                              </span>
+                            </div>
+                            <div className={barTrack}>
+                              <div
+                                className={barFill}
+                                style={{
+                                  width: `${(m.count / maxMisconceptionCount) * 100}%`,
+                                  backgroundColor:
+                                    i === 0
+                                      ? "var(--lumin-error)"
+                                      : "var(--lumin-warning)",
+                                }}
+                              />
+                            </div>
+                          </div>
+                        ))
+                    )}
+                  </div>
+
+                  <div className={`${dashboardCard} recent-signals`}>
+                    <h3 className={dashboardCardTitle}>最近のシグナル</h3>
+                    {events.length === 0 ? (
+                      <p className={dashboardEmpty}>まだ信号がありません</p>
+                    ) : (
+                      events
+                        .slice(-10)
+                        .reverse()
+                        .map((e) => (
+                          <div key={e.id} className={signalCard}>
+                            <span
+                              role="img"
+                              className={`${signalBadge} ${e.correct ? signalBadgeCorrect : signalBadgeIncorrect}`}
+                              aria-label={e.correct ? "正解" : "不正解"}
+                            >
+                              {e.correct ? "✓" : "✗"}
+                            </span>
+                            <div className={signalBody}>
+                              <span className={signalConcept}>{e.concept}</span>
+                              <span className={signalMisconception}>
+                                {e.misconception ?? "初回で理解"}
+                              </span>
+                            </div>
+                            <span className={signalToken}>
+                              {e.participantToken}
+                            </span>
+                          </div>
+                        ))
+                    )}
+                  </div>
+
+                  <div className={demoActions}>
+                    <button
+                      type="button"
+                      className={secondaryButton}
+                      onClick={loadDemoData}
+                      disabled={isLoadingDemo}
+                    >
+                      {isLoadingDemo
+                        ? "読み込み中…"
+                        : "大会デモ用データを読み込む"}
+                    </button>
+                    <p className={privacyNote}>
+                      生徒の解答本文や氏名は表示・保存されません
+                    </p>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+        <div hidden={tab !== "session"}>
+          {visited.has("session") && (
+            <TeacherSessionControl
+              onSessionStarted={(code, quiz) => {
+                setActiveQuiz(quiz);
+                setSessionCode(code);
+                changeTab("dashboard");
+              }}
+              onSessionEnded={() => {
+                setSessionCode(null);
+                setActiveQuiz(null);
+              }}
+            />
+          )}
+        </div>
+        <div hidden={tab !== "lesson"}>
+          {visited.has("lesson") && summary && (
+            <LessonPlanEditor
+              classSummary={{
+                participantCount: summary.participantCount,
+                responseCount: summary.responseCount,
+                correctRate: summary.correctRate,
+                retrySuccessRate: summary.retrySuccessRate,
+                averageHints: summary.averageHints,
+                misconceptions: summary.misconceptions.map((m) => ({
+                  concept: m.name,
+                  count: m.count,
+                })),
+              }}
+              onAdopted={() => {}}
+            />
+          )}
+          {tab === "lesson" && !summary && (
+            <div className={card}>
+              <p style={{ color: "var(--lumin-text-secondary)" }}>
+                クラスのデータが集まるまでレッスンプランは作成できません。
+              </p>
+            </div>
+          )}
+        </div>
+        <div hidden={tab !== "chat"}>
+          {visited.has("chat") && (
+            <>
+              <details className={card}>
+                <summary>AIモデル管理</summary>
+                <ModelManager />
+              </details>
+              <ChatView classSummary={summary} activeQuiz={activeQuiz} />
+            </>
+          )}
+        </div>
       </div>
     </section>
   );

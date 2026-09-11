@@ -93,6 +93,8 @@ globalStyle("input, textarea", {
 });
 
 globalStyle("main", {
+  minHeight: 0,
+  overflowY: "auto",
   flex: "1",
   padding: "16px",
   maxWidth: "1280px",

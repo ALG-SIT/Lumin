@@ -86,16 +86,20 @@ export function TeacherChat({ classSummary, activeQuiz }: TeacherChatProps) {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const historyRef = useRef<HTMLDivElement>(null);
+  const followLatest = useRef(true);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: メッセージ更新時に最下部へスクロールさせる意図的なトリガー
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    const history = historyRef.current;
+    if (history && messages.length > 0 && followLatest.current)
+      history.scrollTop = history.scrollHeight;
+  }, [messages, loading]);
 
   const send = async (text: string) => {
     if (!text.trim() || loading) return;
 
+    followLatest.current = true;
     const userMsg: Message = { role: "user", content: text };
     setMessages((m) => [...m, userMsg]);
     setInput("");
@@ -135,7 +139,7 @@ export function TeacherChat({ classSummary, activeQuiz }: TeacherChatProps) {
     <section className={teacherChat} aria-label="AIと対話">
       <header className={teacherChatHeader}>
         <div>
-          <h2>AI 先生方へ質問</h2>
+          <h2>AIに相談</h2>
           <p>
             現在の小テストと匿名集計を文脈にして、オンデバイスAIが回答します。
           </p>
@@ -148,6 +152,12 @@ export function TeacherChat({ classSummary, activeQuiz }: TeacherChatProps) {
 
       <div
         className={teacherChatHistory}
+        ref={historyRef}
+        onScroll={(event) => {
+          const el = event.currentTarget;
+          followLatest.current =
+            el.scrollHeight - el.scrollTop - el.clientHeight < 48;
+        }}
         role="log"
         aria-live="polite"
         aria-label="会話履歴"
@@ -184,7 +194,6 @@ export function TeacherChat({ classSummary, activeQuiz }: TeacherChatProps) {
             </div>
           </div>
         )}
-        <div ref={bottomRef} />
       </div>
 
       <div className={teacherChatSuggestions}>
@@ -210,12 +219,18 @@ export function TeacherChat({ classSummary, activeQuiz }: TeacherChatProps) {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
+              if (
+                e.key === "Enter" &&
+                !e.shiftKey &&
+                !e.nativeEvent.isComposing &&
+                e.keyCode !== 229
+              ) {
                 e.preventDefault();
                 send(input);
               }
             }}
-            placeholder="学習状況について質問"
+            aria-label="学習状況について質問"
+            placeholder="学習状況について質問（Shift+Enterで改行）"
             disabled={loading}
             rows={1}
           />

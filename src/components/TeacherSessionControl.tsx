@@ -10,6 +10,7 @@ import {
   questionPrompt,
   secondaryButton,
 } from "../styles/shared.css.ts";
+import type { Quiz as StudentQuiz } from "./StudentQuiz";
 import {
   connectedStudentsHeader,
   joinCodeCard,
@@ -57,11 +58,10 @@ export interface QuizQuestion {
   concept: string;
 }
 
-export interface Quiz {
+export interface Quiz extends StudentQuiz {
   id: string;
   title: string;
   subject: string;
-  questions: QuizQuestion[];
 }
 
 export interface Student {
@@ -71,7 +71,7 @@ export interface Student {
 
 export interface TeacherSessionControlProps {
   /** セッション開始成功時に参加コードを上位へ通知 */
-  onSessionStarted: (joinCode: string) => void;
+  onSessionStarted: (joinCode: string, quiz: Quiz) => void;
   /** セッション終了時に通知(常時表示バナー解除用) */
   onSessionEnded?: () => void;
 }
@@ -120,7 +120,7 @@ export function TeacherSessionControl({
       });
       setJoinCode(code);
       setSessionActive(true);
-      onSessionStarted(code);
+      onSessionStarted(code, selectedQuiz);
     } catch (e) {
       setError(String(e));
     } finally {

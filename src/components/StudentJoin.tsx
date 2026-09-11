@@ -44,6 +44,7 @@ export interface StudentJoinProps {
 
 export function StudentJoin({ onJoined, onReset }: StudentJoinProps) {
   const [teachers, setTeachers] = useState<DiscoveredTeacher[]>([]);
+  const [isJoining, setIsJoining] = useState(false);
   const [isBrowsing, setIsBrowsing] = useState(true);
   const [manualIp, setManualIp] = useState("");
   const [manualPort, setManualPort] = useState("");
@@ -65,6 +66,8 @@ export function StudentJoin({ onJoined, onReset }: StudentJoinProps) {
     value.replace(/\D/g, "").slice(0, 4);
 
   const handleJoin = async (teacher: DiscoveredTeacher) => {
+    if (isJoining || joinCode.length !== 4) return;
+    setIsJoining(true);
     setError(null);
     try {
       const res = await invoke<JoinResultPayload>("student_join", {
@@ -76,15 +79,19 @@ export function StudentJoin({ onJoined, onReset }: StudentJoinProps) {
       onJoined(res);
     } catch (e) {
       setError(String(e));
+    } finally {
+      setIsJoining(false);
     }
   };
 
   const handleManualJoin = async () => {
-    if (!manualIp || !manualPort || !joinCode) return;
+    if (!manualIp.trim() || !validPort) return;
+    if (isJoining || joinCode.length !== 4) return;
+    setIsJoining(true);
     setError(null);
     try {
       const res = await invoke<JoinResultPayload>("student_join", {
-        host: manualIp,
+        host: manualIp.trim(),
         port: parseInt(manualPort, 10),
         sessionId: "",
         joinCode,
@@ -92,10 +99,16 @@ export function StudentJoin({ onJoined, onReset }: StudentJoinProps) {
       onJoined(res);
     } catch (e) {
       setError(String(e));
+    } finally {
+      setIsJoining(false);
     }
   };
 
-  const canJoin = joinCode.length === 4;
+  const validPort =
+    /^\d+$/.test(manualPort) &&
+    Number(manualPort) >= 1 &&
+    Number(manualPort) <= 65535;
+  const canJoin = joinCode.length === 4 && !isJoining;
 
   return (
     <div className={studentJoin}>
@@ -106,9 +119,30 @@ export function StudentJoin({ onJoined, onReset }: StudentJoinProps) {
         </button>
       </div>
 
-      <p className={joinSubtitle}>同じWi-Fiにいる先生を探しています…</p>
+      <p className={joinSubtitle}>
+        {isBrowsing
+          ? "同じWi-Fiにいる先生を探しています…"
+          : teachers.length
+            ? "参加する教室に4桁のコードを入力してください。"
+            : "教室が見つかりません。先生の配信を確認して再検索してください。"}
+      </p>
 
       <div className={joinCard}>
+        <button
+          type="button"
+          className={joinReset}
+          disabled={isBrowsing || isJoining}
+          onClick={() => {
+            setIsBrowsing(true);
+            setError(null);
+            invoke<DiscoveredTeacher[]>("browse_teachers")
+              .then(setTeachers)
+              .catch((e) => setError(String(e)))
+              .finally(() => setIsBrowsing(false));
+          }}
+        >
+          教室を再検索
+        </button>
         {isBrowsing && teachers.length === 0 && (
           <p className={joinStatus}>教室を検索中</p>
         )}
@@ -182,7 +216,7 @@ export function StudentJoin({ onJoined, onReset }: StudentJoinProps) {
             className={joinButton}
             type="button"
             onClick={handleManualJoin}
-            disabled={!manualIp || !manualPort || !canJoin}
+            disabled={!manualIp.trim() || !validPort || !canJoin}
           >
             参加
           </button>

@@ -10,17 +10,19 @@ import { style } from "@vanilla-extract/css";
 // (@media max-width: 480px). 768 is emitted before 480 to preserve cascade.
 export const teacherLayout = style({
   display: "grid",
-  gridTemplateColumns: "200px 1fr",
+  gridTemplateColumns: "200px minmax(0, 1fr)",
   gap: "16px",
-  minHeight: "calc(100vh - 73px)",
+  height: "100%",
+  minHeight: 0,
   "@media": {
     "(max-width: 768px)": {
       gridTemplateColumns: "1fr",
-      gridTemplateRows: "auto 1fr",
-      minHeight: "calc(100vh - 73px)",
+      gridTemplateRows: "auto minmax(0, 1fr)",
+      height: "100%",
+      minHeight: 0,
     },
     "(max-width: 480px)": {
-      gridTemplateRows: "auto 1fr",
+      gridTemplateRows: "auto minmax(0, 1fr)",
       gap: "12px",
     },
   },
@@ -90,6 +92,8 @@ export const teacherContent = style({
   flex: 1,
   minWidth: 0,
   overflowY: "auto",
+  minHeight: 0,
+  overscrollBehavior: "contain",
 });
 
 // index.css L130-136.

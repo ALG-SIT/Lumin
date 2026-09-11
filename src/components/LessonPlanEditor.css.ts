@@ -1,4 +1,4 @@
-import { style } from "@vanilla-extract/css";
+import { globalStyle, style } from "@vanilla-extract/css";
 
 // LessonPlanEditor.tsx batch (plan checkbox 6). Declaration values are
 // verbatim copies of the corresponding src/index.css rules.
@@ -42,4 +42,35 @@ export const manualInput = style({
     borderColor: "var(--lumin-indigo)",
     boxShadow: "0 0 0 3px var(--lumin-indigo-soft)",
   },
+});
+
+export const editor = style({ display: "grid", gap: "16px", padding: "16px" });
+globalStyle(`${editor} .lesson-plan-header, ${editor} .lesson-plan-actions`, {
+  display: "flex",
+  flexWrap: "wrap",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: "12px",
+});
+globalStyle(`${editor} .lesson-plan-card`, {
+  display: "grid",
+  gap: "20px",
+  minWidth: 0,
+  padding: "20px",
+  border: "1px solid var(--lumin-border)",
+  borderRadius: "12px",
+  background: "white",
+});
+globalStyle(
+  `${editor} .field, ${editor} .step-field, ${editor} .steps-section`,
+  { display: "grid", gap: "8px" },
+);
+globalStyle(`${editor} .lesson-textarea`, {
+  minHeight: "96px",
+  resize: "vertical",
+});
+globalStyle(`${editor} .char-count`, {
+  textAlign: "right",
+  fontSize: "12px",
+  color: "var(--lumin-muted)",
 });

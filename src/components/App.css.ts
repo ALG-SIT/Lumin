@@ -10,11 +10,13 @@ import { style } from "@vanilla-extract/css";
 export const app = style({
   display: "flex",
   flexDirection: "column",
-  minHeight: "100vh",
+  height: "100dvh",
+  overflow: "hidden",
 });
 
 // index.css L84-93 + L1587-1590 (@media max-width: 480px).
 export const appBar = style({
+  flexShrink: 0,
   display: "flex",
   alignItems: "center",
   justifyContent: "space-between",

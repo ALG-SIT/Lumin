@@ -19,11 +19,11 @@ import { globalStyle, keyframes, style } from "@vanilla-extract/css";
 export const teacherChat = style({
   display: "flex",
   flexDirection: "column",
-  height: "100%",
+  minHeight: 0,
   maxWidth: "1000px",
   margin: "0 auto",
-  padding: "var(--space-5)",
-  gap: "var(--space-4)",
+  padding: "var(--space-3)",
+  gap: "var(--space-3)",
   background: "var(--lumin-bg)",
   "@media": {
     "(max-width: 640px)": {
@@ -84,8 +84,9 @@ export const teacherChatPrivacy = style({
 // index.css L759-772 + @media 640px L1020-1022.
 export const teacherChatHistory = style({
   flex: "1 1 auto",
-  minHeight: "280px",
-  maxHeight: "60vh",
+  minHeight: "160px",
+  height: "clamp(160px, 30dvh, 360px)",
+  overscrollBehavior: "contain",
   overflowY: "auto",
   display: "flex",
   flexDirection: "column",

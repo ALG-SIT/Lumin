@@ -1,12 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { baseInputFocus } from "../styles/global.css.ts";
 import {
   errorMessage,
   primaryButton,
   secondaryButton,
 } from "../styles/shared.css.ts";
-import { manualInput } from "./LessonPlanEditor.css.ts";
+import { editor, manualInput } from "./LessonPlanEditor.css.ts";
 
 export interface MisconceptionSummary {
   concept: string;
@@ -45,6 +45,10 @@ export function LessonPlanEditor({
     teacherNote: "",
   });
   const [loading, setLoading] = useState(false);
+  const [initializing, setInitializing] = useState(true);
+  const edited = useRef(false);
+  const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // 初期テンプレートを生成(UIブロックなし・静かに行う/main実装同等)
@@ -56,9 +60,14 @@ export function LessonPlanEditor({
         const result = await invoke<LessonPlan>("generate_lesson_plan", {
           classSummaryJson: JSON.stringify(classSummary),
         });
-        if (!cancelled) setPlan(result);
-      } catch {
-        // 初期生成失敗は手動再生成に譲る
+        if (!cancelled && !edited.current) setPlan(result);
+      } catch (e) {
+        if (!cancelled)
+          setError(
+            `初期案を生成できませんでした。手動で入力するか、再生成してください: ${e}`,
+          );
+      } finally {
+        if (!cancelled) setInitializing(false);
       }
     })();
     return () => {
@@ -69,6 +78,7 @@ export function LessonPlanEditor({
 
   const regenerate = async () => {
     setLoading(true);
+    setSaved(false);
     setError(null);
     try {
       const result = await invoke<LessonPlan>("generate_lesson_plan", {
@@ -84,11 +94,15 @@ export function LessonPlanEditor({
 
   const adopt = async () => {
     setError(null);
+    setSaving(true);
     try {
       await invoke("save_lesson_plan", { planJson: JSON.stringify(plan) });
       onAdopted(plan);
+      setSaved(true);
     } catch (e) {
       setError(String(e));
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -99,7 +113,13 @@ export function LessonPlanEditor({
   };
 
   return (
-    <div className="lesson-plan-editor">
+    <div
+      className={editor}
+      onChange={() => {
+        edited.current = true;
+        setSaved(false);
+      }}
+    >
       <div className="lesson-plan-header">
         <div>
           <h2 className="lesson-plan-title">次の10分</h2>
@@ -110,14 +130,19 @@ export function LessonPlanEditor({
         <button
           type="button"
           onClick={regenerate}
-          disabled={loading}
+          disabled={initializing || loading || saving}
           className={secondaryButton}
         >
           {loading ? "AIが生成中…" : "オンデバイスAIで再生成"}
         </button>
       </div>
 
-      <div className="lesson-plan-card">
+      {initializing && (
+        <p role="status">
+          AIが初期案を生成中です。先に入力した内容は保持されます。
+        </p>
+      )}
+      <fieldset className="lesson-plan-card" disabled={loading || saving}>
         <div className="field">
           <label htmlFor="lesson-focus">学習の焦点</label>
           <input
@@ -173,15 +198,16 @@ export function LessonPlanEditor({
             placeholder="最後に確認する質問"
           />
         </div>
-      </div>
+      </fieldset>
 
+      {saved && <p role="status">授業案を保存しました。</p>}
       {error && <p className={errorMessage}>{error}</p>}
 
       <div className="lesson-plan-actions">
         <button
           type="button"
           onClick={regenerate}
-          disabled={loading}
+          disabled={initializing || loading || saving}
           className={secondaryButton}
         >
           {loading ? "生成中…" : "AIで再生成"}
@@ -189,10 +215,10 @@ export function LessonPlanEditor({
         <button
           type="button"
           onClick={adopt}
-          disabled={loading}
+          disabled={loading || saving}
           className={primaryButton}
         >
-          この案を採用
+          {saving ? "保存中…" : "この案を採用"}
         </button>
       </div>
     </div>
