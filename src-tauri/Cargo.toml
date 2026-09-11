@@ -1,0 +1,61 @@
+[package]
+name = "lumin"
+version = "0.1.0"
+description = "Lumin - AI-powered learning companion"
+authors = ["you"]
+edition = "2021"
+rust-version = "1.77"
+
+[lib]
+name = "lumin_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-dns-sd = "0.1"
+sysinfo = "0.31"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1.0"
+thiserror = "2.0"
+tokio = { version = "1", features = ["full"] }
+axum = "0.8"
+local-ip-address = "0.6"
+uuid = { version = "1", features = ["serde", "v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+
+ort = { version = "2.0.0-rc.13", features = ["half"] }
+# esaxx_fast dropped: esaxx-rs build.rs hardcodes /MT (static CRT), which
+# conflicts with ort's prebuilt /MD onnxruntime.lib on MSVC (LNK2038/LNK2005).
+tokenizers = { version = "0.23", default-features = false, features = ["progressbar", "onig"] }
+ndarray = "0.17"
+sha2 = "0.11"
+hex = "0.4"
+rand = "0.10"
+half = "2.3"
+tokio-util = { version = "0.7", features = ["io"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream", "json"] }
+futures = "0.3"
+tower = { version = "0.5", features = ["util"] }
+
+[features]
+default = []
+cuda = ["ort/cuda"]
+tensorrt = ["ort/tensorrt"]
+coreml = ["ort/coreml"]
+directml = ["ort/directml"]
+nnapi = ["ort/nnapi"]
+xnnpack = ["ort/xnnpack"]
+load-dynamic = ["ort/load-dynamic"]
+
+[target.'cfg(all(target_os = "macos", target_arch = "aarch64"))'.dependencies]
+ort = { version = "2.0.0-rc.13", features = ["half", "coreml"] }
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+tempfile = "3"

@@ -1,0 +1,27 @@
+# Android Permissions for Local Network Discovery
+
+These permissions are required for Lumin's local network peer discovery feature.
+
+## Required Permissions
+
+```xml
+<uses-permission android:name="android.permission.INTERNET" />
+<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+<uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+```
+
+## Permission Details
+
+- **INTERNET**: Required for TCP socket communication between peers
+- **ACCESS_NETWORK_STATE**: Allows checking network connectivity status
+- **CHANGE_WIFI_MULTICAST_STATE**: Required for mDNS/Bonjour service discovery on local networks
+
+## How These Are Applied
+
+These permissions are defined in `src-tauri/AndroidManifest.xml` and are automatically merged into the final Android manifest during the build process.
+
+## Notes
+
+- No location or Bluetooth permissions are required for this feature
+- These permissions are automatically granted at install time on Android
+- The service type `_lumin-class._tcp` is used for mDNS discovery
