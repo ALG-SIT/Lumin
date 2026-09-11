@@ -46,6 +46,8 @@ pub async fn run_bench(state: &AppState, iterations: usize) -> anyhow::Result<Be
         is_mock = res.is_mock;
     }
 
+    let model_name = state.active_variant().await.display_name;
+
     // iterations > 0 is guaranteed by the early bail above
     let avg_latency = total_latency_ms / iterations as f64;
     let avg_tps = if total_latency_ms > 0.0 {
@@ -56,9 +58,9 @@ pub async fn run_bench(state: &AppState, iterations: usize) -> anyhow::Result<Be
 
     Ok(BenchResult {
         model_id: if is_mock {
-            "mock/gemma-3-1b-it-INT4".to_string()
+            format!("mock/{model_name}")
         } else {
-            "gemma-3-1b-it-INT4".to_string()
+            model_name.to_string()
         },
         platform: std::env::consts::OS.to_string(),
         arch: std::env::consts::ARCH.to_string(),

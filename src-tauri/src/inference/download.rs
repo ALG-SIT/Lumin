@@ -18,99 +18,7 @@ pub struct DownloadProgress {
     pub error: Option<String>,
 }
 
-#[derive(Debug, Clone)]
-struct FileSpec {
-    url_path: &'static str,
-    dest_name: &'static str,
-    /// Expected SHA256 hex (lowercase). None = skip verification (placeholder).
-    expected_sha256: Option<&'static str>,
-}
-
-/// SHA256 hashes verified against the HF API (`lfs.oid`) and cross-checked by
-/// downloading `onnx/model_q4.onnx` locally. See models/README.md for details.
-pub const SHA_1B_TOKENIZER: &str =
-    "55da1312bdf1d7d8fe8d9d1b3eed04086261149e6034e0ac3f8c633b67f5aac8";
-
-fn variant_specs(variant: &str) -> Result<(Vec<FileSpec>, &'static str)> {
-    match variant {
-        // Repo has no model_int4.*; the INT4 build is published as q4 (MatMulNBits 4-bit)
-        "1b-int4" | "default" => Ok((
-            vec![
-                FileSpec {
-                    url_path: "onnx/model_q4.onnx",
-                    dest_name: "gemma-3-1b-it-int4.onnx",
-                    expected_sha256: Some(
-                        "69686023e5892376e38fcbcdd0c77af432c55b3bcd03aee6d561bd1f04507da0",
-                    ),
-                },
-                // Keep upstream filename verbatim: the .onnx's external_data
-                // location is the literal "model_q4.onnx_data" (see PR #5).
-                FileSpec {
-                    url_path: "onnx/model_q4.onnx_data",
-                    dest_name: "model_q4.onnx_data",
-                    expected_sha256: Some(
-                        "c2370070be257a98d50e17d81be13e18304c39e7e6d9d1416f8f883681d2a17b",
-                    ),
-                },
-                FileSpec {
-                    url_path: "tokenizer.json",
-                    dest_name: "tokenizer.json",
-                    expected_sha256: Some(SHA_1B_TOKENIZER),
-                },
-            ],
-            "onnx-community/gemma-3-1b-it-ONNX",
-        )),
-        // int8 is a single-file graph; there is no model_int8.onnx_data in the repo
-        "1b-int8" => Ok((
-            vec![
-                FileSpec {
-                    url_path: "onnx/model_int8.onnx",
-                    dest_name: "gemma-3-1b-it-int8.onnx",
-                    expected_sha256: Some(
-                        "6d8ddeb9c637d43625df45933ad3a9e2337b8a027ab37a70dc230735ba285f5c",
-                    ),
-                },
-                FileSpec {
-                    url_path: "tokenizer.json",
-                    dest_name: "tokenizer.json",
-                    expected_sha256: Some(SHA_1B_TOKENIZER),
-                },
-            ],
-            "onnx-community/gemma-3-1b-it-ONNX",
-        )),
-        // Gemma 3n splits into components; text-only inference needs the merged decoder.
-        // Note: decoder_model_merged expects inputs_embeds, so inference falls back to
-        // mock until embed_tokens chaining is implemented.
-        "3n-e2b-int4" => Ok((
-            vec![
-                FileSpec {
-                    url_path: "onnx/decoder_model_merged_q4.onnx",
-                    dest_name: "gemma-3n-E2B-it-int4.onnx",
-                    expected_sha256: Some(
-                        "4fcb3a37937db577756270c504851e9366ffa738ace6c5ee7d345728aa8dcbd0",
-                    ),
-                },
-                // Keep literal for external_data (see 1b-int4 above).
-                FileSpec {
-                    url_path: "onnx/decoder_model_merged_q4.onnx_data",
-                    dest_name: "decoder_model_merged_q4.onnx_data",
-                    expected_sha256: Some(
-                        "297a9301058969f1e67e42546a48875b4250f58b10a28249ff08d76e0b5ead57",
-                    ),
-                },
-                FileSpec {
-                    url_path: "tokenizer.json",
-                    dest_name: "tokenizer.json",
-                    expected_sha256: Some(
-                        "44cb3d7d545cf895311e004d9a2b2ce823be5eb84c9aa31f73858b607c44c924",
-                    ),
-                },
-            ],
-            "onnx-community/gemma-3n-E2B-it-ONNX",
-        )),
-        _ => anyhow::bail!("unknown variant: {variant} (choose 1b-int4, 1b-int8, 3n-e2b-int4)"),
-    }
-}
+use super::catalog;
 
 fn hf_url(repo: &str, path: &str) -> String {
     format!("https://huggingface.co/{}/resolve/main/{}", repo, path)
@@ -363,20 +271,29 @@ async fn download_one(
     Err(last_err.unwrap_or_else(|| anyhow::anyhow!("download failed for {file_label}")))
 }
 
-/// Download Gemma ONNX + tokenizer for the selected variant.
-/// Emits `download-progress` events and `download-complete` at end.
+/// Download the ONNX graphs + tokenizer for the selected variant.
+///
+/// Files land in the variant's own directory (see [`catalog::Variant::dir`]),
+/// so installing one variant never overwrites another's external data.
+/// Emits `download-progress` events and `download-complete` at the end.
 pub async fn download_model(
     app: AppHandle,
     model_dir: PathBuf,
     variant: String,
     cancel: &AtomicBool,
 ) -> Result<Vec<String>> {
-    let (specs, repo) = variant_specs(&variant)?;
+    let spec_variant = catalog::find(&variant).ok_or_else(|| {
+        anyhow::anyhow!(
+            "unknown variant: {variant} (choose one of: {})",
+            catalog::known_ids()
+        )
+    })?;
+    let dest_dir = spec_variant.dir(&model_dir);
 
     let mut downloaded = Vec::new();
-    for spec in specs {
-        let url = hf_url(repo, spec.url_path);
-        let dest = model_dir.join(spec.dest_name);
+    for spec in spec_variant.files {
+        let url = hf_url(spec_variant.repo, spec.url_path);
+        let dest = dest_dir.join(spec.dest_name);
         let label = spec.dest_name.to_string();
 
         let _ = app.emit(
@@ -405,23 +322,6 @@ pub async fn download_model(
                 downloaded.push(dest.to_string_lossy().to_string());
             }
             Err(e) => {
-                let is_optional_data =
-                    spec.dest_name.contains("onnx_data") && variant.contains("3n");
-                if is_optional_data {
-                    eprintln!("[download] optional file missing {label}: {e:?}");
-                    let _ = app.emit(
-                        "download-progress",
-                        DownloadProgress {
-                            file: label.clone(),
-                            downloaded: 0,
-                            total: None,
-                            percent: Some(0.0),
-                            done: true,
-                            error: Some(format!("optional missing: {e}")),
-                        },
-                    );
-                    continue;
-                }
                 let _ = app.emit(
                     "download-progress",
                     DownloadProgress {
@@ -444,17 +344,72 @@ pub async fn download_model(
     Ok(downloaded)
 }
 
-/// Check if model is ready for the variant
-#[allow(dead_code)]
+/// Check if every file of the variant is present on disk.
 pub fn is_variant_ready(model_dir: &Path, variant: &str) -> bool {
-    let (specs, _) = match variant_specs(variant) {
-        Ok(v) => v,
-        Err(_) => return false,
-    };
-    for spec in specs.iter() {
-        if !model_dir.join(spec.dest_name).exists() {
-            return false;
+    catalog::find(variant).is_some_and(|v| v.is_installed(model_dir))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_catalog_variant_resolves_to_a_repo_url() {
+        for v in catalog::VARIANTS {
+            for f in v.files {
+                let url = hf_url(v.repo, f.url_path);
+                assert!(
+                    url.starts_with("https://huggingface.co/"),
+                    "{}: {url}",
+                    v.id
+                );
+                assert!(url.contains(v.repo), "{}: {url}", v.id);
+            }
         }
     }
-    true
+
+    #[test]
+    fn gemma4_downloads_come_from_the_gemma4_repos() {
+        let e2b = catalog::find("4-e2b-int4").unwrap();
+        let e4b = catalog::find("4-e4b-int4").unwrap();
+        assert_eq!(e2b.repo, "onnx-community/gemma-4-E2B-it-ONNX");
+        assert_eq!(e4b.repo, "onnx-community/gemma-4-E4B-it-ONNX");
+
+        // Every Gemma 4 file must be hash-pinned: these are multi-GB weights
+        // fetched over the network into a classroom device.
+        for v in [e2b, e4b] {
+            for f in v.files {
+                assert!(
+                    f.expected_sha256.is_some_and(|h| h.len() == 64),
+                    "{}: {} is missing a SHA256 pin",
+                    v.id,
+                    f.dest_name
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn unknown_variant_is_not_ready() {
+        assert!(!is_variant_ready(Path::new("/nonexistent"), "gemma-9000"));
+    }
+
+    #[test]
+    fn variant_ready_requires_all_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let v = catalog::find("4-e2b-int4").unwrap();
+        assert!(!is_variant_ready(dir.path(), v.id));
+
+        let vdir = v.dir(dir.path());
+        std::fs::create_dir_all(&vdir).unwrap();
+        for (i, f) in v.files.iter().enumerate() {
+            assert!(
+                !is_variant_ready(dir.path(), v.id),
+                "must not be ready with only {i} of {} files",
+                v.files.len()
+            );
+            std::fs::write(vdir.join(f.dest_name), b"x").unwrap();
+        }
+        assert!(is_variant_ready(dir.path(), v.id));
+    }
 }

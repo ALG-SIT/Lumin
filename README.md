@@ -47,7 +47,8 @@ Tauri へのリライトは PR #1 で `main` にマージ済みで、`main` が�
 
 **オンデバイス AI（`inference` / `ai`）**
 
-- `ort` による ONNX Runtime セッション管理と Gemma 3 1B INT4 の生成
+- `ort` による ONNX Runtime セッション管理と、Gemma 3 1B / Gemma 3n E2B / Gemma 4 E2B・E4B の生成
+- モデル管理画面からの使用モデル切り替え（選択は端末内に保存）
 - アプリ内からのモデルダウンロード（進捗イベント・中断・SHA-256 検証）とローカルモデルの取り込み
 - 正答漏洩ガードと候補外の誤概念ラベルの拒否、失敗時のルールベースへのフォールバック
 - 実行プロバイダとベンチマーク結果、システム情報の表示
@@ -117,7 +118,21 @@ bun run tauri android dev
 bun run download:model                      # Gemma 3 1B INT4（既定）
 bun run download:model --variant 1b-int8
 bun run download:model --variant 3n-e2b-int4
+bun run download:model --variant 4-e2b-int4  # Gemma 4 E2B INT4
+bun run download:model --variant 4-e4b-int4  # Gemma 4 E4B INT4
 ```
+
+導入済みのモデルは「モデル管理」画面の「使用する」で切り替えます。選択は端末内に保存され、次回起動時も引き継がれます。
+
+| バリアント | ダウンロード量 | 推奨メモリ |
+| --- | --- | --- |
+| `1b-int4` | 約 0.8 GB | 8 GB 以上 |
+| `1b-int8` | 約 1.0 GB | 8 GB 以上 |
+| `3n-e2b-int4` | 約 3.1 GB | 16 GB 以上 |
+| `4-e2b-int4` | 約 3.4 GB | 16 GB 以上 |
+| `4-e4b-int4` | 約 5.2 GB | 24 GB 以上 |
+
+Gemma 3n / Gemma 4 はモデルごとのサブディレクトリ（例 `models/gemma-4-e2b-int4/`）へ配置されます。これらは外部データファイル名が共通のため、同じディレクトリに置くと互いを上書きしてしまうためです。
 
 ### ビルド
 
@@ -163,7 +178,11 @@ React フロントエンドは Tauri の `invoke` で Rust コマンドを呼び
 
 ## オンデバイス AI
 
-推論バックエンドは Rust `ort`（ONNX Runtime）で Gemma 3 1B INT4 を端末内実行します。モデルは Hugging Face の `onnx-community/gemma-3-1b-it-ONNX` から取得し、SHA-256 を検証したうえでアプリデータディレクトリへ配置します。
+推論バックエンドは Rust `ort`（ONNX Runtime）で Gemma を端末内実行します。対応モデルは Gemma 3 1B（INT4 / INT8）、Gemma 3n E2B INT4、Gemma 4 E2B・E4B INT4 で、どれを使うかはモデル管理画面から選べます。モデルは Hugging Face の `onnx-community` から取得し、全ファイルの SHA-256 を検証したうえでアプリデータディレクトリへ配置します。
+
+対応モデルの一覧は `src-tauri/src/inference/catalog.rs` が単一の情報源です。ダウンロード仕様・配置先・推論の接続はすべてこの定義から導出されるため、モデルの追加はここへ 1 エントリ足すだけで済みます。
+
+Gemma 3 1B は `input_ids` を直接受け取る単一グラフですが、Gemma 3n と Gemma 4 は `embed_tokens` グラフが出力する `inputs_embeds` と `per_layer_inputs` をデコーダへ渡す 2 段構成です。KV キャッシュの層数とヘッド次元はモデルごとに異なる（Gemma 4 は共有 KV 層が露出せず、スライディング窓層だけ次元が倍）ため、定数ではなく ONNX グラフの入力定義から実行時に読み取ります。
 
 実行プロバイダは Cargo feature で切り替えます。Apple Silicon の macOS ビルドでは CoreML が既定で有効で、未対応ノードは ONNX Runtime の CPU プロバイダへフォールバックします。
 
