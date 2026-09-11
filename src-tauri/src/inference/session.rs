@@ -249,6 +249,7 @@ mod tests {
     #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
     #[test]
     fn apple_silicon_build_includes_coreml() {
+        use super::preferred_execution_provider;
         use ort::ep::ExecutionProvider;
 
         assert_eq!(
