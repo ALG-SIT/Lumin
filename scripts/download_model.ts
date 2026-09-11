@@ -250,14 +250,17 @@ async function downloadFile(
 
 async function main() {
   const args = process.argv.slice(2);
-  const variantArg =
-    args.find((a) => a.startsWith("--variant="))?.split("=")[1] ??
-    args[args.indexOf("--variant") + 1];
-  const outArg =
-    args.find((a) => a.startsWith("--out="))?.split("=")[1] ??
-    args[args.indexOf("--out") + 1];
-  const variant = variantArg ?? "1b-int4";
-  const outDir = outArg ?? "models";
+  // `--flag=value` or `--flag value`. indexOf returns -1 when the flag is
+  // absent, so the separated form must check for the flag before indexing,
+  // or `args[-1 + 1]` silently picks up an unrelated first argument.
+  const flag = (name: string): string | undefined => {
+    const inline = args.find((a) => a.startsWith(`--${name}=`));
+    if (inline) return inline.slice(`--${name}=`.length);
+    const i = args.indexOf(`--${name}`);
+    return i >= 0 ? args[i + 1] : undefined;
+  };
+  const variant = flag("variant") ?? "1b-int4";
+  const outDir = flag("out") ?? "models";
 
   if (!(variant in VARIANTS)) {
     console.error(
