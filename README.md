@@ -4,7 +4,9 @@
 
 Lumin は、生徒の解答を端末内で分析して段階的なヒントを返し、解答本文を送らずにクラス全体の誤概念を教師へ共有する、ローカルファースト型の学習支援アプリです。
 
-このリポジトリは `doc/AI_Innovators_Cup_Lumin_構想.md` に基づく大会用 MVP です。Tauri + Rust + React（Bun / Vite）で作られており、1 つのアプリを教師モード・生徒モードに切り替えて利用します。同じローカルネットワーク上の端末同士で HTTP / mDNS を使って教室セッションを構成します。
+このリポジトリは `doc/AI_Innovators_Cup_Lumin_構想.md` に基づく大会用 MVP です。Tauri 2 + Rust + React（Bun / Vite）で作られており、1 つのアプリを教師モード・生徒モードに切り替えて利用します。同じローカルネットワーク上の端末同士が DNS-SD（mDNS）で互いを発見し、HTTP で教室セッションを構成します。
+
+Tauri へのリライトは PR #1 で `main` にマージ済みで、`main` が現在の開発ベースです。
 
 ## 技術スタック
 
@@ -12,29 +14,52 @@ Lumin は、生徒の解答を端末内で分析して段階的なヒントを�
 | --- | --- | --- |
 | Rust | Tauri 2 | デスクトップ / モバイル向け Rust バックエンド |
 | Rust | `serde`, `anyhow`, `thiserror`, `tokio` | IPC、エラー処理、非同期処理 |
+| Rust | `axum`, `tauri-plugin-dns-sd`, `local-ip-address` | 教室内 HTTP サーバーと mDNS 探索 |
+| Rust | `ort` 2.0 (ONNX Runtime), `tokenizers`, `ndarray` | 端末内推論 |
+| Rust | `reqwest`, `sha2` | モデルのダウンロードと整合性検証 |
 | JS ランタイム | Bun | パッケージマネージャ兼実行環境 |
 | フロントエンド | React 19 + Vite 8 + TypeScript 5 | UI とビルド |
-| Tauri JS | `@tauri-apps/api`, `@tauri-apps/cli` | `invoke` / `listen` / プラットフォームコマンド |
-| 推論（予定） | Rust `ort` + Gemma 3 1B INT4 | 端末内 ONNX Runtime 推論 |
+| スタイル | vanilla-extract | 型付き CSS（`*.css.ts`、ランタイム CSS-in-JS なし） |
+| 品質 | Biome 2.5, Vitest 4, Testing Library | Lint / フォーマット / フロントエンドテスト |
+| Tauri JS | `@tauri-apps/api`, `@tauri-apps/plugin-dialog`, `@momics/dns-sd-tauri` | `invoke` / `listen` / プラットフォームコマンド |
 
-## 現在の実装状態
+## 実装状況
 
-このブランチは **Tauri スキャフォールド** 段階です。以下は既存の Lumin 設計から移植した機能リストで、順次 Rust / React へ実装予定です。
+以下は `main` に入っている機能です。
 
-- 数学・国語・理科・社会・英語、6 セット 25 問の選択式教材バンク
-- 端末内の正誤判定と誤概念分類
+**教材と分析（`lumin_core`）**
+
+- 数学・国語・理科・社会・英語、6 セット 25 問のデモ教材バンク
+- 端末内の正誤判定と誤概念分類（全角・半角などを吸収する正規化つき）
 - 正解を直接出さない 3 段階ヒント
 - ヒント後の再回答成功記録
-- ローカルネットワークによる教室内通信
-- 4 桁の参加コードによる教室セッションの照合
-- 授業 ID による別授業データの混入防止
-- 切断中の分析結果を端末内キューへ保持し、再接続時に受領確認つきで自動再送
-- 解答本文を含まない分析イベントのみの送信
 - 教師向け正答率・再挑戦成功率・平均ヒント数・誤概念集計
-- 回答が集まる前でも試せる大会デモデータ
-- 集計から生成する「次回授業の冒頭 10 分案」
-- 教師による授業案の編集・採用
+- 集計から生成する「次回授業の冒頭 10 分案」と、教師による編集・採用
+
+**教室内通信（`network`）**
+
+- 教師端末が `axum` の HTTP サーバーを起動し、生徒端末は `_lumin-class._tcp` を mDNS で発見して参加
+- 4 桁の参加コードによる照合（コードは探索情報には載せない）
+- 授業 ID による別授業データの混入防止
+- 解答本文を含まない分析イベントのみの送信（`AnalysisEvent` は解答本文を保持できない型）
+- 切断中の分析結果を端末内キューへ保持し、再接続時に受領確認つきで自動再送・重複排除
+- 教師側からの生徒の切断（kick）とセッション終了通知
+
+**オンデバイス AI（`inference` / `ai`）**
+
+- `ort` による ONNX Runtime セッション管理と Gemma 3 1B INT4 の生成
+- アプリ内からのモデルダウンロード（進捗イベント・中断・SHA-256 検証）とローカルモデルの取り込み
+- 正答漏洩ガードと候補外の誤概念ラベルの拒否、失敗時のルールベースへのフォールバック
+- 実行プロバイダとベンチマーク結果、システム情報の表示
+
+**永続化（`persistence`）**
+
 - 終了した授業の匿名集計・採用案を端末内へ最大 100 件保存する授業履歴
+- 進行中セッションの復旧用スナップショットと、未送信イベントのキュー（いずれもアトミック書き込み）
+
+**デモ**
+
+- 回答が集まる前でも試せる大会デモデータと 3 分デモフロー
 
 ## 前提条件
 
@@ -59,7 +84,7 @@ Bun は `curl -fsSL https://bun.sh/install | bash` でインストールでき�
 - **iOS**: Xcode + `rustup target add aarch64-apple-ios aarch64-apple-ios-sim`
 - **Android**: Android Studio + SDK + NDK + `cargo install cargo-ndk`
 
-モバイルビルド手順は今後検証予定です。現時点ではデスクトップ開発が推奨です。
+手順は `docs/ios-build.md` と `docs/android-build.md` を参照してください。CI でビルドしているのはデスクトップ 3 プラットフォームのみで、モバイルビルドは引き続き検証中です。
 
 ## 開発の始め方
 
@@ -82,7 +107,17 @@ bun run tauri ios dev
 bun run tauri android dev
 ```
 
-`bun run tauri dev` は Vite 開発サーバーと Rust バックエンドを同時に起動します。フロントエンドだけ確認したい場合は `bun run dev` で `http://localhost:1420` を開いてください。
+`bun run tauri dev` は Vite 開発サーバーと Rust バックエンドを同時に起動します。フロントエンドだけ確認したい場合は `bun run dev` で `http://localhost:1420` を開いてください。Tauri の外で開いた場合は `isTauriEnvironment()` による判定で IPC を伴う操作が無効化され、画面が固まらないようになっています。
+
+### モデルの取得
+
+アプリの「モデル管理」画面からダウンロードできるほか、CLI でも取得できます。
+
+```bash
+bun run download:model                      # Gemma 3 1B INT4（既定）
+bun run download:model --variant 1b-int8
+bun run download:model --variant 3n-e2b-int4
+```
 
 ### ビルド
 
@@ -92,21 +127,20 @@ bun run build && bun run tauri build
 
 `bun run build` は TypeScript と Vite のビルドを実行します。`bun run tauri build` はそれを組み込んだアプリバンドルを `src-tauri/target/release/bundle` に出力します。
 
-### テスト
+### テスト・Lint
 
 ```bash
-# Rust 側の単体テスト
-cargo test --manifest-path src-tauri/Cargo.toml
+bun run test:run   # Vitest（フロントエンド）
+bun run check      # Biome（lint + format チェック）
+bun run check:fix  # Biome の自動修正
+bun run build      # 型チェック + フロントエンドビルド
 
-# 型チェックとフロントエンドビルド
-bun run build
+cargo test --manifest-path src-tauri/Cargo.toml   # Rust 単体テスト
 ```
-
-現時点では本格的なテストスイートは整備中です。`cargo test` はスキャフォールドに含まれる最小限のテストを実行します。
 
 ## アーキテクチャの概要
 
-React フロントエンドは Tauri の `invoke` で Rust コマンドを呼び出します。Rust バックエンドは `lumin_core`（教材・分析・集計）、`inference`（`ort` による Gemma 推論）、`network`（教室内 HTTP / mDNS 通信）の 3 つの領域に分けて実装します。教師端末が小さな HTTP サーバーを立て、生徒端末は mDNS で教室を発見して参加コード付きで接続します。分析イベントは端末内で生成され、解答本文を含まずに教師端末へ送信されます。詳細は `docs/architecture/01-overview.md` を参照してください。
+React フロントエンドは Tauri の `invoke` で Rust コマンドを呼び出し、ダウンロード進捗や教室の発見は Tauri イベントで受け取ります。Rust バックエンドは `lumin_core`（教材・分析・集計）、`inference` / `ai`（`ort` による Gemma 推論と安全ガード）、`network`（教室内 HTTP / mDNS 通信）、`persistence`（履歴・キュー）に分かれています。教師端末が HTTP サーバーを立てて `_lumin-class._tcp` を広告し、生徒端末は mDNS で教室を発見して参加コード付きで接続します。分析イベントは端末内で生成され、解答本文を含まずに教師端末へ送信されます。詳細は `docs/architecture/01-overview.md` を参照してください。
 
 ## プライバシー境界
 
@@ -123,49 +157,71 @@ React フロントエンドは Tauri の `invoke` で Rust コマンドを呼び
 - 誤概念ラベル
 - 初回正誤、ヒント回数、再回答結果
 
-`AnalysisEvent` は解答本文を保持できない型として定義します。通信終了時はローカルネットワークセッションを切断します。通信が一時的に切れた場合、未送信の `AnalysisEvent` は生徒端末内だけに保持されます。再接続後に再送し、教師端末からイベント ID の受領確認が届いた時点で削除します。教師側の授業履歴も端末内保存で、UI から個別に削除できます。
+通信終了時はローカルネットワークセッションを切断します。通信が一時的に切れた場合、未送信の `AnalysisEvent` は生徒端末内だけに保持されます。再接続後に再送し、教師端末からイベント ID の受領確認が届いた時点で削除します。教師側の授業履歴も端末内保存で、UI から個別に削除できます。
+
+外部へ出る通信は、モデルファイルを取得するときの Hugging Face へのダウンロードだけです（`tauri.conf.json` の CSP でも `connect-src` を `https://huggingface.co` に限定しています）。
 
 ## オンデバイス AI
 
-推論バックエンドは Rust `ort`（ONNX Runtime）を使い、Gemma 3 1B INT4 を端末内で実行する方向で整備中です。モデルは Hugging Face からダウンロードし、アプリデータディレクトリへ配置します。現時点では推論モジュールはスキャフォールドに含まれておらず、今後 `src-tauri/src/inference/` 以下に追加予定です。Gemma にはインターネット通信機能はなく、推論は端末 CPU / GPU 実行プロバイダで完結します。
+推論バックエンドは Rust `ort`（ONNX Runtime）で Gemma 3 1B INT4 を端末内実行します。モデルは Hugging Face の `onnx-community/gemma-3-1b-it-ONNX` から取得し、SHA-256 を検証したうえでアプリデータディレクトリへ配置します。
+
+実行プロバイダは Cargo feature で切り替えます。Apple Silicon の macOS ビルドでは CoreML が既定で有効で、未対応ノードは ONNX Runtime の CPU プロバイダへフォールバックします。
+
+```bash
+cargo build --manifest-path src-tauri/Cargo.toml --features cuda      # NVIDIA
+cargo build --manifest-path src-tauri/Cargo.toml --features directml  # Windows
+cargo build --manifest-path src-tauri/Cargo.toml --features xnnpack   # CPU 最適化
+```
+
+Gemma にはインターネット通信機能はなく、推論は端末の CPU / GPU 実行プロバイダで完結します。生成は JSON Schema 制約つきで行い、正答漏洩チェックと候補外ラベルの拒否を通し、不正な場合はルールベースの安全な出力へフォールバックします。
 
 ## プロジェクト構成
 
 ```
 .
-├── package.json              # bun scripts: dev / build / preview / tauri
-├── vite.config.ts            # ポート 1420、Tauri 開発用 HMR 設定
-├── tsconfig.json
-├── index.html
+├── package.json              # bun scripts: dev / build / test / check / download:model / tauri
+├── biome.json                # Biome 2.5 の lint / format 設定
+├── vite.config.ts            # ポート 1420、vanilla-extract、Tauri 開発用 HMR 設定
+├── vitest.config.ts
+├── Cargo.toml                # src-tauri を含む Cargo ワークスペース
 ├── src/
-│   ├── App.tsx               # React ルートコンポーネント（現在はスキャフォールド UI）
-│   ├── main.tsx
-│   └── assets/
+│   ├── App.tsx               # 役割選択とモード切り替え
+│   ├── components/           # 教師 / 生徒 / モデル管理 UI と *.css.ts
+│   │   └── __tests__/        # Vitest + Testing Library
+│   ├── styles/               # vanilla-extract のトークンと共有スタイル
+│   └── lib/tauri.ts          # Tauri ホスト内かどうかの実行時判定
 ├── src-tauri/
-│   ├── Cargo.toml            # lumin、Tauri、tokio など
-│   ├── tauri.conf.json       # productName、identifier、build 設定
-│   ├── build.rs
+│   ├── Cargo.toml            # Tauri、axum、ort、tokenizers など
+│   ├── tauri.conf.json       # productName、identifier、CSP、bundle 設定
 │   ├── capabilities/default.json
 │   └── src/
-│       └── lib.rs            # Tauri コマンドとアプリセットアップ
-├── scripts/                  # 今後ダウンロード・診断スクリプトを配置
-├── docs/
-│   └── architecture/         # アーキテクチャ文書
-└── dist/                     # Vite ビルド出力
+│       ├── lib.rs            # Tauri コマンド登録とアプリセットアップ
+│       ├── lumin_core/       # 教材・分析・集計・デモデータ
+│       ├── inference/        # ort セッション、生成、トークナイザ、DL、ベンチ
+│       ├── ai/               # 構造化出力スキーマと正答漏洩ガード
+│       ├── network/          # HTTP サーバー、DNS-SD、参加コード認証、再送
+│       ├── session.rs        # 教室セッションのコマンド
+│       └── persistence.rs    # 履歴・スナップショット・保留キュー
+├── scripts/                  # モデルダウンロードスクリプト
+├── docs/                     # アーキテクチャ、スパイク、モバイルビルド手順
+├── doc/                      # 大会構想メモ（旧 Swift 版の実装メモを含む）
+└── .github/workflows/ci.yml  # frontend / rust / tauri build マトリクス
 ```
 
 ## 開発ワークフロー
 
-機能ごとにブランチを切り、PR 経由でマージします。`src-tauri/` に変更を加えた後は以下を実行してください。
+`main` への直接 push は行わず、機能ごとにブランチを切って PR 経由でマージします。CI は macOS / Windows / Linux で `bun run build`、`cargo check` / `clippy` / `fmt`、および Tauri のバンドルビルドを実行します。ローカルでは以下を通してから PR を出してください。
 
 ```bash
 cargo check --manifest-path src-tauri/Cargo.toml
 cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
 cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+bun run check
+bun run test:run
 bun run build
 ```
 
-詳細は `CONTRIBUTING.md`（今後作成予定）を参照してください。
+ブランチ命名、コミット規約、PR の進め方は `CONTRIBUTING.md` を参照してください。
 
 ## ライセンス
 
