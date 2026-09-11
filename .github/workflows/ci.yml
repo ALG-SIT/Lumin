@@ -65,6 +65,8 @@ jobs:
         run: cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
       - name: cargo fmt
         run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+      - name: cargo test
+        run: cargo test --manifest-path src-tauri/Cargo.toml
 
   tauri:
     name: tauri build (${{ matrix.os }})
