@@ -1,4 +1,5 @@
 use crate::inference::catalog::{self, Variant};
+use crate::inference::tokenizer::GemmaTokenizer;
 use crate::lumin_core::models::{AnalysisEvent, Quiz};
 use anyhow::Result;
 use ort::session::{builder::GraphOptimizationLevel, Session};
@@ -19,6 +20,49 @@ pub struct ModelInfo {
     pub size_bytes: Option<u64>,
     pub quantization: String,
     pub description: String,
+}
+
+/// Progress of loading a model's graphs into memory, emitted to the frontend
+/// as `model-load-progress`.
+///
+/// Loading is separate from downloading: the files can already be on disk and
+/// still take tens of seconds to become a usable session. `percent` is the
+/// share of the variant's graph bytes that have finished loading, so it moves
+/// only when a graph is actually ready, and `stage` names what is being
+/// loaded meanwhile.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelLoadProgress {
+    pub variant: String,
+    pub model_name: String,
+    /// `tokenizer` | `decoder` | `embed` | `ready` | `error`.
+    pub stage: String,
+    /// Japanese label describing the current stage.
+    pub label: String,
+    /// 0-100, by graph bytes loaded.
+    pub percent: f64,
+    pub done: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+impl ModelLoadProgress {
+    pub fn new(variant: &Variant, stage: &str, label: &str, percent: f64) -> Self {
+        Self {
+            variant: variant.id.to_string(),
+            model_name: variant.display_name.to_string(),
+            stage: stage.to_string(),
+            label: label.to_string(),
+            percent,
+            done: stage == "ready" || stage == "error",
+            error: None,
+        }
+    }
+
+    pub fn with_error(mut self, message: impl Into<String>) -> Self {
+        self.error = Some(message.into());
+        self
+    }
 }
 
 /// File the active-variant selection is persisted to, inside the model root.
@@ -56,12 +100,18 @@ pub struct AppState {
     pub events: Arc<Mutex<Vec<AnalysisEvent>>>,
     /// Currently active quiz for class summary context.
     pub active_quiz: Arc<Mutex<Option<Quiz>>>,
+    /// Handle used to report model-load progress. Absent outside a running
+    /// Tauri app (unit tests), where progress simply goes nowhere.
+    app: Option<tauri::AppHandle>,
 }
 
 pub struct InferenceSession {
     pub session: Session,
     /// `embed_tokens` graph for [`Architecture::EmbedChained`] variants.
     pub embed_session: Option<Session>,
+    /// Loaded once with the graphs: the file is ~20 MB of JSON, and parsing it
+    /// per generation added a visible delay before the first token.
+    pub tokenizer: GemmaTokenizer,
     /// Variant this session was built from, so a model switch can drop it.
     pub variant_id: String,
     #[allow(dead_code)]
@@ -138,6 +188,23 @@ impl AppState {
             download_cancelled: Arc::new(AtomicBool::new(false)),
             events: Arc::new(Mutex::new(Vec::new())),
             active_quiz: Arc::new(Mutex::new(None)),
+            app: None,
+        }
+    }
+
+    /// Attach the app handle so model-load progress reaches the frontend.
+    pub fn with_app_handle(mut self, app: tauri::AppHandle) -> Self {
+        self.app = Some(app);
+        self
+    }
+
+    /// Report one step of loading a model into memory.
+    pub fn emit_load_progress(&self, progress: &ModelLoadProgress) {
+        if let Some(app) = &self.app {
+            use tauri::Emitter;
+            if let Err(e) = app.emit("model-load-progress", progress) {
+                eprintln!("[emit] model-load-progress failed: {e}");
+            }
         }
     }
 

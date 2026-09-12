@@ -39,12 +39,12 @@ async fn classroom_model_evaluation() {
     let ctx = TeacherChatContext {
         class_summary: summary.clone(),
         active_quiz: Some(quiz.clone()),
-        recent_messages: vec![],
+        history: vec![],
     };
     let empty_ctx = TeacherChatContext {
         class_summary: empty.clone(),
         active_quiz: Some(quiz.clone()),
-        recent_messages: vec![],
+        history: vec![],
     };
     let all_correct = ClassSummary {
         correct_rate: 1.0,
@@ -129,7 +129,7 @@ async fn classroom_model_evaluation() {
         }
         println!("START {name}");
         let attempts = if name.starts_with("lesson") {
-            generate_lesson_attempts(&state, &prompt)
+            generate_lesson_attempts(&state, &prompt, None)
                 .await
                 .expect("lesson generation")
         } else {

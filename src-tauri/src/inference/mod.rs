@@ -73,8 +73,13 @@ pub async fn list_models(state: State<'_, AppState>) -> Result<Vec<ModelEntry>, 
 }
 
 /// Switch the model used for analysis, hints and chat.
+///
+/// The selection is app-wide, so the change is broadcast as
+/// `active-model-changed`: the status shown in the app bar belongs to no
+/// single screen and has to follow a switch made anywhere.
 #[tauri::command]
 pub async fn set_active_model(
+    app: tauri::AppHandle,
     variant: String,
     state: State<'_, AppState>,
 ) -> Result<ModelEntry, String> {
@@ -84,7 +89,7 @@ pub async fn set_active_model(
         .map_err(|e| e.to_string())?;
 
     let installed = v.is_installed(&state.model_dir);
-    Ok(ModelEntry {
+    let entry = ModelEntry {
         id: v.id.to_string(),
         name: v.display_name.to_string(),
         size_bytes: if installed {
@@ -103,7 +108,13 @@ pub async fn set_active_model(
         progress: None,
         recommended: physical_memory_gb() >= v.min_memory_gb,
         active: true,
-    })
+    };
+
+    use tauri::Emitter;
+    if let Err(e) = app.emit("active-model-changed", &entry) {
+        eprintln!("[emit] active-model-changed failed: {e}");
+    }
+    Ok(entry)
 }
 
 /// Id of the variant inference currently runs on.
@@ -175,6 +186,20 @@ pub async fn import_model(
     }
 
     Ok(())
+}
+
+/// Load the selected model into memory ahead of the first question.
+///
+/// Returns true once the model is resident. Progress is reported as
+/// `model-load-progress` events while the graphs are read, so the UI can show
+/// what is happening instead of appearing to hang on the first generation.
+/// Returns false when the selected model is not installed - generation would
+/// run in mock mode and there is nothing to load.
+#[tauri::command]
+pub async fn preload_active_model(state: State<'_, AppState>) -> Result<bool, String> {
+    generate::ensure_active_session(&state)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]

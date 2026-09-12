@@ -90,9 +90,16 @@ async fn generate_stream(
         use_chat_template,
     };
 
-    let result = inference::generate::generate_stream(&state, opts, |token| {
-        if let Err(e) = app.emit("token", token) {
-            eprintln!("[emit] token failed: {e}");
+    let result = inference::generate::generate_stream(&state, opts, |event| {
+        // "token" stays text-only for existing listeners; the structured form
+        // carries the prompt-processing phase as well.
+        if let inference::generate::GenerationEvent::Token { text, .. } = &event {
+            if let Err(e) = app.emit("token", text) {
+                eprintln!("[emit] token failed: {e}");
+            }
+        }
+        if let Err(e) = app.emit("generation-progress", &event) {
+            eprintln!("[emit] generation-progress failed: {e}");
         }
         Ok(())
     })
@@ -409,7 +416,7 @@ pub fn run() {
             inference::runtime::set_resource_dir(app.path().resource_dir()?);
             let model_dir = resolve_model_dir_for_app(app.handle());
             let _ = std::fs::create_dir_all(&model_dir);
-            app.manage(AppState::new(model_dir));
+            app.manage(AppState::new(model_dir).with_app_handle(app.handle().clone()));
             app.manage(Mutex::new(SessionManager::new()));
             Ok(())
         })
@@ -427,10 +434,13 @@ pub fn run() {
             inference::get_active_model,
             inference::import_model,
             inference::cancel_download,
+            inference::preload_active_model,
             ai::commands::analyze_answer,
             ai::commands::generate_hint,
             ai::commands::generate_lesson_plan,
+            ai::commands::generate_lesson_plan_stream,
             ai::commands::chat_with_teacher,
+            ai::commands::chat_with_teacher_stream,
             send_analysis_event,
             get_class_summary,
             load_demo_data,
