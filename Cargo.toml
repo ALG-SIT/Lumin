@@ -1,3 +1,8 @@
 [workspace]
 members = ["src-tauri"]
 resolver = "2"
+
+[patch.crates-io]
+# Xcode 27 の Swift コンパイラで ios/Sources/DnsSdPlugin.swift の型推論が通らないため、
+# NSNull フォールバックの書き方だけを直したローカルフォークを使う。
+tauri-plugin-dns-sd = { path = "vendor/tauri-plugin-dns-sd" }

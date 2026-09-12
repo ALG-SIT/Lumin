@@ -4740,8 +4740,6 @@ dependencies = [
 [[package]]
 name = "tauri-plugin-dns-sd"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "54b0d5d76fec0709a880f0b4e21e671faba0a3805e47d14be33bbe3f05f4ff4e"
 dependencies = [
  "log",
  "mdns-sd",
