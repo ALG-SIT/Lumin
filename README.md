@@ -48,7 +48,7 @@ Tauri へのリライトは PR #1 で `main` にマージ済みで、`main` が�
 **オンデバイス AI（`inference` / `ai`）**
 
 - `ort` による ONNX Runtime セッション管理と、Gemma 3 1B / Gemma 3n E2B / Gemma 4 E2B・E4B の生成
-- モデル管理画面からの使用モデル切り替え（選択は端末内に保存）
+- 設定画面からの使用モデル切り替え（選択は端末内に保存）と、画面上部バーでの状態表示
 - アプリ内からのモデルダウンロード（進捗イベント・中断・SHA-256 検証）とローカルモデルの取り込み
 - 正答漏洩ガードと候補外の誤概念ラベルの拒否、失敗時のルールベースへのフォールバック
 - 実行プロバイダとベンチマーク結果、システム情報の表示
@@ -112,7 +112,7 @@ bun run tauri android dev
 
 ### モデルの取得
 
-アプリの「モデル管理」画面からダウンロードできるほか、CLI でも取得できます。
+アプリ上部バーのモデル表示から「設定」を開いてダウンロードできるほか、CLI でも取得できます。
 
 ```bash
 bun run download:model                      # Gemma 3 1B INT4（既定）
@@ -122,7 +122,9 @@ bun run download:model --variant 4-e2b-int4  # Gemma 4 E2B INT4
 bun run download:model --variant 4-e4b-int4  # Gemma 4 E4B INT4
 ```
 
-導入済みのモデルは「モデル管理」画面の「使用する」で切り替えます。選択は端末内に保存され、次回起動時も引き継がれます。
+導入済みのモデルは設定画面の「使用する」で切り替えます。選択は端末内に保存され、次回起動時も引き継がれます。
+
+モデルは役割をまたいで共有される（先生のチャットや授業案と、生徒に出るヒントは同じモデルで動く）ため、設定は先生・生徒いずれの画面からも、役割を選ぶ前からも開けます。使用中のモデル名・利用可否・メモリへの読み込み進捗は常に上部バーに出ます。
 
 | バリアント | ダウンロード量 | 推奨メモリ |
 | --- | --- | --- |
@@ -184,7 +186,7 @@ React フロントエンドは Tauri の `invoke` で Rust コマンドを呼び
 
 ## オンデバイス AI
 
-推論バックエンドは Rust `ort`（ONNX Runtime）で Gemma を端末内実行します。対応モデルは Gemma 3 1B（INT4 / INT8）、Gemma 3n E2B INT4、Gemma 4 E2B・E4B INT4 で、どれを使うかはモデル管理画面から選べます。モデルは Hugging Face の `onnx-community` から取得し、全ファイルの SHA-256 を検証したうえでアプリデータディレクトリへ配置します。
+推論バックエンドは Rust `ort`（ONNX Runtime）で Gemma を端末内実行します。対応モデルは Gemma 3 1B（INT4 / INT8）、Gemma 3n E2B INT4、Gemma 4 E2B・E4B INT4 で、どれを使うかは設定画面から選べます。モデルは Hugging Face の `onnx-community` から取得し、全ファイルの SHA-256 を検証したうえでアプリデータディレクトリへ配置します。
 
 対応モデルの一覧は `src-tauri/src/inference/catalog.rs` が単一の情報源です。ダウンロード仕様・配置先・推論の接続はすべてこの定義から導出されるため、モデルの追加はここへ 1 エントリ足すだけで済みます。
 
@@ -208,13 +210,33 @@ Gemma 4 は空の KV キャッシュと 0 始まりの位置で推論します�
 | Gemma 4 E4B INT4 | 8 トークン | 16.8 秒 | M4 Max / 64 GB |
 | Gemma 4 E4B INT4 | 64 トークン | 37.2 秒 | M4 Max / 64 GB |
 
-実推論のスモークテストは `#[ignore]` 付きで、モデルを配置したうえで次のように実行します。
+実推論のスモークテストは `#[ignore]` 付きで、モデルを配置したうえで次のように実行します。ONNX セッションは同時に生成できないため、実推論テストは `--test-threads=1` で直列実行してください。
 
 ```bash
 bun run download:model --variant 4-e4b-int4
 cargo test --manifest-path src-tauri/Cargo.toml --release \
-  gemma4_e4b_long_generation_smoke -- --ignored --nocapture
+  gemma4_e4b_long_generation_smoke -- --ignored --nocapture --test-threads=1
 ```
+
+会話・チャットまわりの実推論テストは次のとおりです。
+
+| テスト | 確認内容 |
+| --- | --- |
+| `multi_turn_conversation_uses_the_previous_turns` | 直前のターンを参照しないと答えられない質問に正答するか（履歴なしでは正答不能であることも対照確認） |
+| `conversation_streaming_matches_the_returned_text` | ストリーミングで届く断片の連結が最終テキストと一致するか |
+| `teacher_chat_follow_up_continues_the_conversation` | 教師チャットが集計に基づいて答え、続きの質問で前の質問に答え直さないか |
+| `prompt_processing_is_reported_before_the_first_token` | 最初のトークンが出るまでの待ち（プロンプトのキャッシュ読み込み）が、順序どおりに進捗として報告されるか |
+| `lesson_plan_reports_the_stages_it_reaches` | レッスンプラン生成が、プロンプト読み込み・生成・検証・作り直しの各段階を実際に報告するか |
+| `teacher_chat_transcript_probe` | 実際の応答を出力するだけの確認用（フロントの描画テスト用フィクスチャ採取元） |
+
+```bash
+cargo test --manifest-path src-tauri/Cargo.toml \
+  multi_turn_conversation_uses_the_previous_turns -- --ignored --nocapture --test-threads=1
+```
+
+会話・ストリーミングの2件は導入済みの全バリアント（Gemma 3 1B / Gemma 4 E2B / E4B）を、教師チャットの2件は Gemma 4 系を対象にします。未導入のものは自動的にスキップされます。
+
+採取した実応答は `src/components/__tests__/realReplies.ts` に置き、`MarkdownRealReplies.test.tsx` が実際の Markdown 描画結果（入れ子箇条書きや、モデルごとに異なる箇条書き記号の幅を含む）を検証します。
 
 標準構成は単一の ONNX Runtime とネイティブ WebGPU EP です。Dawn が macOS では Metal、Windows では Direct3D 12、Linux では Vulkan を利用します。ブラウザや別モデル形式・別推論バックエンドは不要です。GPU登録失敗時はエラーとし、CPU実行へ自動切替しません。形状計算など未対応の補助演算は ORT の CPU ノードで実行されます。
 
@@ -240,7 +262,7 @@ Gemma にはインターネット通信機能はなく、推論は端末の CPU 
 ├── Cargo.toml                # src-tauri を含む Cargo ワークスペース
 ├── src/
 │   ├── App.tsx               # 役割選択とモード切り替え
-│   ├── components/           # 教師 / 生徒 / モデル管理 UI と *.css.ts
+│   ├── components/           # 教師 / 生徒 / 設定・モデル管理 UI と *.css.ts
 │   │   └── __tests__/        # Vitest + Testing Library
 │   ├── styles/               # vanilla-extract のトークンと共有スタイル
 │   └── lib/tauri.ts          # Tauri ホスト内かどうかの実行時判定
