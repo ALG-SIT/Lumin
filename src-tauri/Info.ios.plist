@@ -8,5 +8,14 @@
 	<array>
 		<string>_lumin-class._tcp</string>
 	</array>
+	<!-- iOS 26 以降の SDK でビルドしたアプリは UIScene ライフサイクルの採用が必須。
+	     tao は UIApplicationSupportsMultipleScenes が true のときだけ
+	     application:configurationForConnectingSceneSession:options: を登録するため、
+	     このキーが無いと起動時に UIKit が SIGTRAP で落とす。 -->
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<true/>
+	</dict>
 </dict>
 </plist>
