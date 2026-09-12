@@ -1,4 +1,4 @@
-import { style } from "@vanilla-extract/css";
+import { globalStyle, style } from "@vanilla-extract/css";
 
 // LessonPlanEditor.tsx batch (plan checkbox 6). Declaration values are
 // verbatim copies of the corresponding src/index.css rules.
@@ -42,4 +42,64 @@ export const manualInput = style({
     borderColor: "var(--lumin-indigo)",
     boxShadow: "0 0 0 3px var(--lumin-indigo-soft)",
   },
+});
+
+export const lessonEditor = style({
+  display: "flex",
+  flexDirection: "column",
+  gap: "12px",
+  padding: "12px",
+  minWidth: 0,
+});
+
+globalStyle(`${lessonEditor} .lesson-plan-header`, {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: "12px",
+  flexWrap: "wrap",
+});
+globalStyle(`${lessonEditor} h2, ${lessonEditor} h3, ${lessonEditor} p`, {
+  margin: 0,
+});
+globalStyle(`${lessonEditor} .lesson-plan-card`, {
+  display: "grid",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  gap: "12px",
+  "@media": { "(max-width: 640px)": { gridTemplateColumns: "minmax(0, 1fr)" } },
+});
+globalStyle(`${lessonEditor} .field, ${lessonEditor} .step-field`, {
+  display: "flex",
+  flexDirection: "column",
+  gap: "4px",
+  minWidth: 0,
+});
+globalStyle(`${lessonEditor} .steps-section`, {
+  gridColumn: "1 / -1",
+  display: "grid",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  gap: "8px 12px",
+  "@media": { "(max-width: 640px)": { gridTemplateColumns: "minmax(0, 1fr)" } },
+});
+globalStyle(`${lessonEditor} .steps-section h3`, { gridColumn: "1 / -1" });
+globalStyle(`${lessonEditor} textarea`, {
+  resize: "vertical",
+  minHeight: "64px",
+  padding: "8px",
+  fontSize: "14px",
+});
+globalStyle(`${lessonEditor} .char-count`, {
+  alignSelf: "flex-end",
+  fontSize: "11px",
+  color: "var(--lumin-muted)",
+});
+globalStyle(`${lessonEditor} .lesson-plan-actions`, {
+  display: "flex",
+  justifyContent: "flex-end",
+  gap: "8px",
+  position: "sticky",
+  bottom: 0,
+  background: "var(--lumin-bg)",
+  padding: "8px 0",
+  flexWrap: "wrap",
 });

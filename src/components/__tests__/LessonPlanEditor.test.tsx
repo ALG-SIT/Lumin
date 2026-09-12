@@ -64,3 +64,25 @@ describe("LessonPlanEditor", () => {
     });
   });
 });
+
+it("sends Rust-compatible misconception fields and the active quiz", async () => {
+  const { invoke } = await import("@tauri-apps/api/core");
+  const summary = {
+    ...mockSummary,
+    misconceptions: [{ name: "切片", count: 3, share: 0.3 }],
+  };
+  const quiz = { id: "q", title: "一次関数", subject: "数学", questions: [] };
+  render(
+    <LessonPlanEditor
+      classSummary={summary}
+      quiz={quiz}
+      onAdopted={() => {}}
+    />,
+  );
+  await vi.waitFor(() =>
+    expect(invoke).toHaveBeenCalledWith("generate_lesson_plan", {
+      classSummaryJson: JSON.stringify(summary),
+      quizJson: JSON.stringify(quiz),
+    }),
+  );
+});

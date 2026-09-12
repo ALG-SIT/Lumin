@@ -44,9 +44,9 @@ futures = "0.3"
 tower = { version = "0.5", features = ["util"] }
 
 [features]
-default = []
+default = ["load-dynamic"]
 cuda = ["ort/cuda"]
-tensorrt = ["ort/tensorrt"]
+tensorrt = ["ort/tensorrt", "ort/cuda"]
 coreml = ["ort/coreml"]
 directml = ["ort/directml"]
 nnapi = ["ort/nnapi"]

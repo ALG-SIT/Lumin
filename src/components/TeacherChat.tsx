@@ -86,16 +86,21 @@ export function TeacherChat({ classSummary, activeQuiz }: TeacherChatProps) {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const historyRef = useRef<HTMLDivElement>(null);
+  const followLatest = useRef(true);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: メッセージ更新時に最下部へスクロールさせる意図的なトリガー
+  // biome-ignore lint/correctness/useExhaustiveDependencies: メッセージと待機表示の更新時に履歴内だけを追従する
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    const history = historyRef.current;
+    if (messages.length > 0 && history && followLatest.current) {
+      history.scrollTop = history.scrollHeight;
+    }
+  }, [messages, loading]);
 
   const send = async (text: string) => {
     if (!text.trim() || loading) return;
 
+    followLatest.current = true;
     const userMsg: Message = { role: "user", content: text };
     setMessages((m) => [...m, userMsg]);
     setInput("");
@@ -123,7 +128,6 @@ export function TeacherChat({ classSummary, activeQuiz }: TeacherChatProps) {
     } catch (e) {
       const errText = `エラー: ${e}`;
       setError(errText);
-      setMessages((m) => [...m, { role: "assistant", content: errText }]);
     } finally {
       setLoading(false);
     }
@@ -147,6 +151,12 @@ export function TeacherChat({ classSummary, activeQuiz }: TeacherChatProps) {
       </header>
 
       <div
+        ref={historyRef}
+        onScroll={(event) => {
+          const el = event.currentTarget;
+          followLatest.current =
+            el.scrollHeight - el.scrollTop - el.clientHeight < 48;
+        }}
         className={teacherChatHistory}
         role="log"
         aria-live="polite"
@@ -184,7 +194,6 @@ export function TeacherChat({ classSummary, activeQuiz }: TeacherChatProps) {
             </div>
           </div>
         )}
-        <div ref={bottomRef} />
       </div>
 
       <div className={teacherChatSuggestions}>
@@ -210,7 +219,12 @@ export function TeacherChat({ classSummary, activeQuiz }: TeacherChatProps) {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
+              if (
+                e.key === "Enter" &&
+                !e.shiftKey &&
+                !e.nativeEvent.isComposing &&
+                e.keyCode !== 229
+              ) {
                 e.preventDefault();
                 send(input);
               }

@@ -127,28 +127,6 @@ pub fn has_input(session: &Session, name: &str) -> bool {
     session.inputs().iter().any(|i| i.name() == name)
 }
 
-#[allow(dead_code)]
-const APPLE_SILICON_COREML: bool = cfg!(all(target_os = "macos", target_arch = "aarch64"));
-
-/// Execution provider selected first for this build. Unsupported CoreML nodes
-/// continue on ONNX Runtime's CPU provider.
-#[allow(dead_code)]
-pub fn preferred_execution_provider() -> &'static str {
-    if APPLE_SILICON_COREML || cfg!(feature = "coreml") {
-        "CoreML (GPU + CPU fallback)"
-    } else if cfg!(feature = "tensorrt") {
-        "TensorRT"
-    } else if cfg!(feature = "cuda") {
-        "CUDA"
-    } else if cfg!(feature = "directml") {
-        "DirectML"
-    } else if cfg!(feature = "nnapi") {
-        "NNAPI"
-    } else {
-        "CPU"
-    }
-}
-
 impl AppState {
     pub fn new(model_dir: PathBuf) -> Self {
         let active = read_active_variant(&model_dir)
@@ -227,96 +205,96 @@ impl AppState {
 
 /// Create an ort session with platform-appropriate execution providers
 pub fn create_session<P: AsRef<Path>>(model_path: P) -> Result<Session> {
-    let _ = ort::init().commit();
-
-    let mut builder = Session::builder().map_err(|e| anyhow::anyhow!("{}", e))?;
-    builder = builder
+    use super::runtime::{self, Provider};
+    runtime::initialize()?;
+    let provider = runtime::selected()?;
+    let err = |e: ort::Error<ort::session::builder::SessionBuilder>| anyhow::anyhow!(e.to_string());
+    let mut builder = Session::builder()?
         .with_optimization_level(GraphOptimizationLevel::Level3)
-        .map_err(|e| anyhow::anyhow!("{}", e))?;
-
-    // XNNPACK uses its own thread pool; ORT intra threads should be 1 to avoid contention
-    #[cfg(feature = "xnnpack")]
-    {
-        let xnn_threads = std::num::NonZeroUsize::new(
-            std::thread::available_parallelism()
-                .map(|n| n.get())
-                .unwrap_or(4)
-                .clamp(1, 4),
-        )
-        .unwrap();
-        builder = builder
-            .with_intra_threads(1)
-            .map_err(|e| anyhow::anyhow!("{}", e))?;
-        // Disable ORT spinning when XNNPACK is active (recommended)
-        if let Ok(b) = builder.with_intra_op_spinning(false) {
-            builder = b;
+        .map_err(err)?
+        .with_intra_threads(if provider == Provider::Xnnpack { 1 } else { 4 })
+        .map_err(err)?;
+    if provider == Provider::WebGpu {
+        let env = runtime::register_webgpu()?;
+        let devices: Vec<_> = env
+            .devices()
+            .filter(|d| {
+                d.ep().ok() == Some("WebGpuExecutionProvider")
+                    && d.hardware_device().ty() == ort::memory::DeviceType::GPU
+            })
+            .take(1)
+            .collect();
+        if devices.is_empty() {
+            anyhow::bail!("対応するGPUを検出できません。GPUドライバを確認してください。CPUには自動切替しません。");
         }
-        // XNNPACK provider will be configured below with xnn_threads
-        let _ = xnn_threads;
-    }
-    #[cfg(not(feature = "xnnpack"))]
-    {
-        let intra_threads = std::thread::available_parallelism()
-            .map(|n| n.get())
-            .unwrap_or(4)
-            .clamp(1, 4);
-        builder = builder
-            .with_intra_threads(intra_threads)
-            .map_err(|e| anyhow::anyhow!("{}", e))?;
-    }
-
-    #[cfg(any(feature = "coreml", all(target_os = "macos", target_arch = "aarch64")))]
-    let coreml_cache_dir = model_path
-        .as_ref()
-        .parent()
-        .unwrap_or_else(|| Path::new("."))
-        .join(".coreml-cache");
-    #[cfg(any(feature = "coreml", all(target_os = "macos", target_arch = "aarch64")))]
-    std::fs::create_dir_all(&coreml_cache_dir)?;
-
-    // Execution providers are ordered by priority and unsupported nodes fall
-    // back to CPU. Apple Silicon desktop builds enable CoreML automatically.
-    #[cfg(feature = "xnnpack")]
-    let xnn_threads = std::num::NonZeroUsize::new(
-        std::thread::available_parallelism()
-            .map(|n| n.get())
-            .unwrap_or(4)
-            .clamp(1, 4),
-    )
-    .unwrap();
-    let mut builder = builder
-        .with_execution_providers([
-            #[cfg(feature = "tensorrt")]
-            ort::ep::TensorRT::default().build(),
+        // Dawn selects the native backend for the discovered GPU.
+        let options = vec![(
+            "WebGpuExecutionProvider.enableGraphCapture".into(),
+            "0".into(),
+        )];
+        builder = builder.with_devices(devices, Some(&options)).map_err(err)?;
+    } else {
+        let ep = match provider {
             #[cfg(feature = "cuda")]
-            ort::ep::CUDA::default().build(),
+            Provider::Cuda => ort::ep::CUDA::default().build(),
+            #[cfg(feature = "tensorrt")]
+            Provider::TensorRt => {
+                builder = builder
+                    .with_execution_providers([
+                        ort::ep::TensorRT::default().build().error_on_failure(),
+                        ort::ep::CUDA::default().build().error_on_failure(),
+                    ])
+                    .map_err(err)?;
+                // Both GPU providers were explicitly registered above.
+                ort::ep::CPU::default().build()
+            }
             #[cfg(feature = "directml")]
-            ort::ep::DirectML::default().build(),
-            #[cfg(any(feature = "coreml", all(target_os = "macos", target_arch = "aarch64")))]
-            {
-                let profile_compute_plan =
-                    std::env::var("LUMIN_COREML_PROFILE").as_deref() == Ok("1");
-                ort::ep::CoreML::default()
-                    .with_compute_units(ort::ep::coreml::ComputeUnits::CPUAndGPU)
-                    .with_model_format(ort::ep::coreml::ModelFormat::MLProgram)
-                    .with_low_precision_accumulation_on_gpu(true)
-                    .with_model_cache_dir(coreml_cache_dir.to_string_lossy())
-                    .with_profile_compute_plan(profile_compute_plan)
-                    .build()
-            },
-            #[cfg(feature = "nnapi")]
-            ort::ep::NNAPI::default().build(),
-            #[cfg(feature = "xnnpack")]
-            ort::ep::XNNPACK::default()
-                .with_intra_op_num_threads(xnn_threads)
+            Provider::DirectMl => {
+                builder = builder
+                    .with_memory_pattern(false)
+                    .map_err(err)?
+                    .with_parallel_execution(false)
+                    .map_err(err)?;
+                ort::ep::DirectML::default().build()
+            }
+            #[cfg(any(feature = "coreml", target_os = "macos", target_os = "ios"))]
+            Provider::CoreMl => ort::ep::CoreML::default()
+                .with_compute_units(ort::ep::coreml::ComputeUnits::CPUAndGPU)
+                .with_model_format(ort::ep::coreml::ModelFormat::MLProgram)
+                .with_low_precision_accumulation_on_gpu(false)
                 .build(),
-        ])
-        .map_err(|e| anyhow::anyhow!("{}", e))?;
-
-    let session = builder
+            #[cfg(feature = "nnapi")]
+            Provider::Nnapi => ort::ep::NNAPI::default().build(),
+            #[cfg(feature = "xnnpack")]
+            Provider::Xnnpack => {
+                builder = builder.with_intra_op_spinning(false).map_err(err)?;
+                ort::ep::XNNPACK::default()
+                    .with_intra_op_num_threads(std::num::NonZeroUsize::new(4).unwrap())
+                    .build()
+            }
+            Provider::Cpu => ort::ep::CPU::default().build(),
+            Provider::WebGpu => unreachable!(),
+            #[allow(unreachable_patterns)]
+            _ => anyhow::bail!(
+                "選択したEPはこのビルドに含まれていません: {}",
+                provider.label()
+            ),
+        };
+        builder = builder
+            .with_execution_providers([ep.error_on_failure()])
+            .map_err(err)?;
+    }
+    if let Ok(root) = std::env::var("LUMIN_ORT_PROFILE_DIR") {
+        std::fs::create_dir_all(&root)?;
+        builder = builder
+            .with_profiling(
+                Path::new(&root).join(model_path.as_ref().file_stem().unwrap_or_default()),
+            )
+            .map_err(err)?;
+    }
+    builder
         .commit_from_file(model_path)
-        .map_err(|e| anyhow::anyhow!("{}", e))?;
-    Ok(session)
+        .map_err(|e| anyhow::anyhow!(e.to_string()))
 }
 
 /// Resolve model directory: src-tauri/models or project_root/models
@@ -343,22 +321,6 @@ pub fn resolve_model_dir() -> PathBuf {
 
 #[cfg(test)]
 mod tests {
-    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
-    #[test]
-    fn apple_silicon_build_includes_coreml() {
-        use super::preferred_execution_provider;
-        use ort::ep::ExecutionProvider;
-
-        assert_eq!(
-            preferred_execution_provider(),
-            "CoreML (GPU + CPU fallback)"
-        );
-        assert!(
-            ort::ep::CoreML::default().is_available().unwrap(),
-            "the linked ONNX Runtime binary does not include CoreML"
-        );
-    }
-
     /// Gemma 4 exposes fewer cache entries than it has layers (shared-KV
     /// layers are folded away) and mixes head dims between sliding-window and
     /// full-attention layers, so the geometry has to come from the graph.

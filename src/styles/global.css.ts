@@ -94,6 +94,8 @@ globalStyle("input, textarea", {
 
 globalStyle("main", {
   flex: "1",
+  minHeight: 0,
+  overflowY: "auto",
   padding: "16px",
   maxWidth: "1280px",
   margin: "0 auto",

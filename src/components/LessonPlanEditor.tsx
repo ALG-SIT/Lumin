@@ -1,26 +1,14 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { baseInputFocus } from "../styles/global.css.ts";
 import {
   errorMessage,
   primaryButton,
   secondaryButton,
 } from "../styles/shared.css.ts";
-import { manualInput } from "./LessonPlanEditor.css.ts";
-
-export interface MisconceptionSummary {
-  concept: string;
-  count: number;
-}
-
-export interface ClassSummary {
-  participantCount: number;
-  responseCount: number;
-  correctRate: number;
-  retrySuccessRate: number;
-  averageHints: number;
-  misconceptions: MisconceptionSummary[];
-}
+import { lessonEditor, manualInput } from "./LessonPlanEditor.css.ts";
+import type { Quiz } from "./StudentQuiz";
+import type { ClassSummary } from "./TeacherChat";
 
 export interface LessonPlan {
   focus: string;
@@ -31,13 +19,16 @@ export interface LessonPlan {
 
 export interface LessonPlanEditorProps {
   classSummary: ClassSummary;
+  quiz?: Quiz | null;
   onAdopted: (plan: LessonPlan) => void;
 }
 
 export function LessonPlanEditor({
   classSummary,
+  quiz,
   onAdopted,
 }: LessonPlanEditorProps) {
+  const edited = useRef(false);
   const [plan, setPlan] = useState<LessonPlan>({
     focus: "",
     steps: ["", "", "", ""],
@@ -55,8 +46,9 @@ export function LessonPlanEditor({
       try {
         const result = await invoke<LessonPlan>("generate_lesson_plan", {
           classSummaryJson: JSON.stringify(classSummary),
+          quizJson: quiz ? JSON.stringify(quiz) : null,
         });
-        if (!cancelled) setPlan(result);
+        if (!cancelled && !edited.current) setPlan(result);
       } catch {
         // 初期生成失敗は手動再生成に譲る
       }
@@ -68,11 +60,13 @@ export function LessonPlanEditor({
   }, []);
 
   const regenerate = async () => {
+    edited.current = true;
     setLoading(true);
     setError(null);
     try {
       const result = await invoke<LessonPlan>("generate_lesson_plan", {
         classSummaryJson: JSON.stringify(classSummary),
+        quizJson: quiz ? JSON.stringify(quiz) : null,
       });
       setPlan(result);
     } catch (e) {
@@ -99,12 +93,17 @@ export function LessonPlanEditor({
   };
 
   return (
-    <div className="lesson-plan-editor">
+    <div
+      className={lessonEditor}
+      onChange={() => {
+        edited.current = true;
+      }}
+    >
       <div className="lesson-plan-header">
         <div>
           <h2 className="lesson-plan-title">次の10分</h2>
           <p className="lesson-plan-subtitle">
-            AIの初期案を、先生の判断で仕上げます。
+            AIまたは教材に基づく初期案を、先生の判断で仕上げます。
           </p>
         </div>
         <button

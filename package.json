@@ -14,7 +14,8 @@
     "tauri": "tauri",
     "download:model": "bun run scripts/download_model.ts",
     "test": "vitest",
-    "test:run": "vitest run"
+    "test:run": "vitest run",
+    "prepare:runtime": "python3 scripts/prepare_onnx_runtime.py"
   },
   "dependencies": {
     "@fontsource-variable/noto-sans-jp": "5.3.0",

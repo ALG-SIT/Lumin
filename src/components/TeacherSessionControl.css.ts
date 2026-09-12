@@ -24,7 +24,8 @@ export const sessionControl = style({
   gap: "var(--space-5)",
   maxWidth: "900px",
   margin: "0 auto",
-  padding: "var(--space-6)",
+  width: "100%",
+  padding: "var(--space-3)",
   "@media": {
     "(max-width: 640px)": {
       padding: "var(--space-4)",
@@ -102,8 +103,8 @@ export const sessionCardSubtitle = style({
 
 // index.css L1107-1112 (copy 1) + L1883-1888 (copy 2; gap/margin win).
 export const subjectGroups = style({
-  display: "flex",
-  flexDirection: "column",
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 250px), 1fr))",
   gap: "var(--space-5)",
   marginBottom: "var(--space-5)",
 });
@@ -129,7 +130,7 @@ export const subjectLabel = style({
 // L2148-2150 (@media max-width: 640px).
 export const quizPicker = style({
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
+  gridTemplateColumns: "1fr",
   gap: "var(--space-3)",
   "@media": {
     "(max-width: 640px)": {
@@ -143,9 +144,10 @@ export const quizPicker = style({
 // (@media prefers-reduced-motion: reduce).
 export const quizCard = style({
   display: "flex",
-  flexDirection: "column",
+  justifyContent: "space-between",
+  alignItems: "center",
   gap: "var(--space-2)",
-  padding: "var(--space-4)",
+  padding: "var(--space-3)",
   textAlign: "left",
   background: "var(--lumin-canvas)",
   border: "1px solid var(--lumin-border)",

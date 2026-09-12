@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   joinCodeLabel,
   joinCodeValue,
@@ -61,13 +61,14 @@ export interface TeacherDashboardProps {
   onReset?: () => void;
 }
 
-type TeacherTab = "dashboard" | "session" | "lesson" | "chat";
+type TeacherTab = "dashboard" | "session" | "lesson" | "chat" | "models";
 
 const TABS: { id: TeacherTab; label: string }[] = [
   { id: "dashboard", label: "概要" },
   { id: "session", label: "セッション" },
   { id: "lesson", label: "レッスンプラン" },
   { id: "chat", label: "AIチャット" },
+  { id: "models", label: "モデル管理" },
 ];
 
 interface AnalysisEvent {
@@ -109,17 +110,24 @@ function ChatView({
 }
 
 export function TeacherDashboard({ onReset }: TeacherDashboardProps) {
+  const contentRef = useRef<HTMLDivElement>(null);
   const [tab, setTab] = useState<TeacherTab>("dashboard");
   const [sessionCode, setSessionCode] = useState<string | null>(null);
   const [summary, setSummary] = useState<ClassSummary | null>(null);
   const [events, setEvents] = useState<AnalysisEvent[]>([]);
   const [isLoadingDemo, setIsLoadingDemo] = useState(false);
-  const [activeQuiz] = useState<Quiz | null>(null);
+  const [activeQuiz, setActiveQuiz] = useState<Quiz | null>(null);
 
   const refreshSummary = useCallback(async () => {
     try {
       const s = await invoke<ClassSummary>("get_class_summary");
       setSummary(s);
+      const session = await invoke<{
+        quiz: Quiz | null;
+        joinCode: string | null;
+      }>("get_teacher_session");
+      setActiveQuiz(session.quiz);
+      setSessionCode(session.joinCode);
     } catch (e) {
       console.error("get_class_summary failed", e);
     }
@@ -173,7 +181,10 @@ export function TeacherDashboard({ onReset }: TeacherDashboardProps) {
                 ? `${sidebarButton} ${sidebarButtonActive}`
                 : sidebarButton
             }
-            onClick={() => setTab(t.id)}
+            onClick={() => {
+              setTab(t.id);
+              if (contentRef.current) contentRef.current.scrollTop = 0;
+            }}
             aria-current={tab === t.id ? "page" : undefined}
           >
             {t.label}
@@ -186,7 +197,7 @@ export function TeacherDashboard({ onReset }: TeacherDashboardProps) {
         )}
       </nav>
 
-      <div className={teacherContent}>
+      <div ref={contentRef} className={teacherContent}>
         {/* 参加コード常時表示(セッション有効中・全タブ共通) */}
         {sessionCode && (
           <div className={joinCodeBanner} role="status" aria-live="polite">
@@ -356,24 +367,20 @@ export function TeacherDashboard({ onReset }: TeacherDashboardProps) {
           <TeacherSessionControl
             onSessionStarted={(code) => {
               setSessionCode(code);
+              void refreshSummary();
               setTab("dashboard");
             }}
-            onSessionEnded={() => setSessionCode(null)}
+            onSessionEnded={() => {
+              setSessionCode(null);
+              setActiveQuiz(null);
+              void refreshSummary();
+            }}
           />
         )}
         {tab === "lesson" && summary && (
           <LessonPlanEditor
-            classSummary={{
-              participantCount: summary.participantCount,
-              responseCount: summary.responseCount,
-              correctRate: summary.correctRate,
-              retrySuccessRate: summary.retrySuccessRate,
-              averageHints: summary.averageHints,
-              misconceptions: summary.misconceptions.map((m) => ({
-                concept: m.name,
-                count: m.count,
-              })),
-            }}
+            classSummary={summary}
+            quiz={activeQuiz}
             onAdopted={() => {}}
           />
         )}
@@ -384,14 +391,9 @@ export function TeacherDashboard({ onReset }: TeacherDashboardProps) {
             </p>
           </div>
         )}
+        {tab === "models" && <ModelManager />}
         {tab === "chat" && (
-          <>
-            <section className="model-manager-panel">
-              <h2>AIモデル管理</h2>
-              <ModelManager />
-            </section>
-            <ChatView classSummary={summary} activeQuiz={activeQuiz} />
-          </>
+          <ChatView classSummary={summary} activeQuiz={activeQuiz} />
         )}
       </div>
     </section>

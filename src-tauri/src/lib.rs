@@ -406,6 +406,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_dns_sd::init())
         .setup(|app| {
+            inference::runtime::set_resource_dir(app.path().resource_dir()?);
             let model_dir = resolve_model_dir_for_app(app.handle());
             let _ = std::fs::create_dir_all(&model_dir);
             app.manage(AppState::new(model_dir));
@@ -442,6 +443,7 @@ pub fn run() {
             session::save_lesson_plan,
             session::get_last_adopted_lesson_plan,
             session::list_quizzes,
+            session::get_teacher_session,
             session::start_session,
             session::end_session,
             session::list_students,

@@ -190,11 +190,11 @@ Gemma 3 1B は `input_ids` を直接受け取る単一グラフですが、Gemma
 
 先頭の `<bos>` はプロンプト文字列側で付け、トークナイザーの特殊トークン付与は無効にしています。Gemma 3 の `tokenizer.json` は `<bos>` を自動で前置しますが Gemma 4 はしないため、トークナイザー任せにすると Gemma 3 で `<bos>` が二重になり、Gemma 4 では付きません。
 
-KV キャッシュの先頭には、常にマスクされるゼロ埋めの 1 スロットを置いています。初回ステップでキャッシュが空だと `past_key_values.*` が要素数 0 のテンソルになり、ONNX Runtime の CoreML プロバイダがこれを拒否するためです（マスク済みのキーは softmax 後に寄与しないので出力は変わりません）。
+Gemma 4 は空の KV キャッシュと 0 始まりの位置で推論します。マスクしたダミーの 1 スロットを前置すると、実モデルで語や記号の重複が生じることを確認したため、Gemma 4 には付けません。Gemma 3 / 3n の既存経路では CoreML のゼロ要素テンソル制限を避けるため、マスク済みスロットを維持しています。Gemma 4 は標準の ONNX Runtime WebGPU EP を使い、Apple Silicon では Metal で実行します。CoreML の明示選択時は非対応を通知し、CPUへ暗黙に切り替えません。
 
 ### 実機での確認
 
-Apple M5 / 16 GB および Apple M4 Max / 64 GB の macOS（CoreML）で実推論を確認しています。
+以下は旧 CoreML 実装での参考計測です。Gemma 4 ではその後、連続推論のクラッシュとダミーキャッシュによる出力の重複が見つかったため、現行実装の速度・回答品質の検証結果としては扱わないでください。現行の GPU 検証は `docs/reviews/2026-09-12-onnx-accelerator-audit.md` を参照してください。
 
 | モデル | 生成 | 所要（モデル読み込み含む） | 端末 |
 | --- | --- | --- | --- |
@@ -212,15 +212,18 @@ cargo test --manifest-path src-tauri/Cargo.toml --release \
   gemma4_e4b_long_generation_smoke -- --ignored --nocapture
 ```
 
-実行プロバイダは Cargo feature で切り替えます。Apple Silicon の macOS ビルドでは CoreML が既定で有効で、未対応ノードは ONNX Runtime の CPU プロバイダへフォールバックします。
+標準構成は単一の ONNX Runtime とネイティブ WebGPU EP です。Dawn が macOS では Metal、Windows では Direct3D 12、Linux では Vulkan を利用します。ブラウザや別モデル形式・別推論バックエンドは不要です。GPU登録失敗時はエラーとし、CPU実行へ自動切替しません。形状計算など未対応の補助演算は ORT の CPU ノードで実行されます。
 
 ```bash
-cargo build --manifest-path src-tauri/Cargo.toml --features cuda      # NVIDIA
-cargo build --manifest-path src-tauri/Cargo.toml --features directml  # Windows
-cargo build --manifest-path src-tauri/Cargo.toml --features xnnpack   # CPU 最適化
+bun run prepare:runtime  # 初回に公式バイナリを取得・SHA-256検証（Python 3 はビルド時のみ必要）
+bun run tauri dev       # prepare:runtime は dev/build の前にも自動実行
 ```
 
-Gemma にはインターネット通信機能はなく、推論は端末の CPU / GPU 実行プロバイダで完結します。生成は JSON Schema 制約つきで行い、正答漏洩チェックと候補外ラベルの拒否を通し、不正な場合はルールベースの安全な出力へフォールバックします。
+同梱版は ONNX Runtime 1.30.0 / WebGPU EP 0.3.0。対象は macOS 14+ ARM64、Linux x86_64 (glibc 2.28+)、Windows x86_64 / ARM64。各環境で対応GPU・ドライバが必要です。Apple Siliconで実推論確認済み、Windows/Linuxは実機未検証です。署名配布では同梱ネイティブライブラリも署名対象になります。
+
+必要に応じ `LUMIN_EXECUTION_PROVIDER=cuda|tensorrt|directml|coreml|nnapi|xnnpack|cpu` と対応 Cargo feature を明示できます。CUDA 等では対応版 ORT を `ORT_DYLIB_PATH` で指定してください。同梱の標準版は WebGPU 用です。`LUMIN_WEBGPU_LIBRARY` はプラグインの差し替え、`LUMIN_ORT_PROFILE_DIR` は演算配置検証用です。
+
+Gemma にはインターネット通信機能はなく、推論は端末の CPU / GPU 実行プロバイダで完結します。生成は greedy decoding で行います。構造化出力はプロンプトで JSON を指定し、生成後に形式・文字数・候補ラベルを検証します（生成中の JSON Schema 制約ではありません）。途中終了した出力と正答が漏れるヒントは採用せず、採点・ヒント・授業案はルールや教材へ戻します。教師チャットは推論失敗・途中終了をエラーとして表示します。
 
 ## プロジェクト構成
 

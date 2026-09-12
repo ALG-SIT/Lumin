@@ -3,6 +3,7 @@ pub mod catalog;
 pub mod download;
 pub mod generate;
 pub mod model_download;
+pub mod runtime;
 pub mod session;
 pub mod tokenizer;
 

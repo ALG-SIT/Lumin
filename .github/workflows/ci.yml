@@ -59,6 +59,11 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri -> target
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Stage ONNX runtime
+        run: python3 scripts/prepare_onnx_runtime.py
       - name: cargo check
         run: cargo check --manifest-path src-tauri/Cargo.toml
       - name: cargo clippy
@@ -111,6 +116,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri -> target
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
       - name: Build Tauri app bundle
         run: bun run tauri build --bundles ${{ matrix.bundles }}
       - name: Upload Tauri app bundle

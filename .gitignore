@@ -20,3 +20,7 @@ dist/
 # Models (large files)
 models/
 LuminApp/Models/
+
+# Generated official ONNX Runtime native libraries
+src-tauri/runtime/
+src-tauri/.ort-stage-*/

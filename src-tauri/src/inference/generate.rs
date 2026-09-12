@@ -6,12 +6,13 @@ use std::time::{Duration, Instant};
 
 use super::catalog::Architecture;
 use super::session::{has_input, kv_layer_specs, AppState, KvLayerSpec};
-use super::tokenizer::{load_tokenizer, mock_detokenize, ChatFormat};
+use super::tokenizer::{load_tokenizer, ChatFormat};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GenerateOptions {
     pub prompt: String,
     pub max_tokens: Option<usize>,
+    /// Reserved for sampling support; current decoding is deterministic argmax.
     pub temperature: Option<f32>,
     pub use_chat_template: Option<bool>,
 }
@@ -25,6 +26,8 @@ pub struct GenerateResult {
     pub latency_ms: u64,
     pub tokens_per_sec: f64,
     pub is_mock: bool,
+    #[serde(default)]
+    pub truncated: bool,
     pub model_id: String,
 }
 
@@ -76,6 +79,7 @@ fn mock_generate(prompt: &str, max_tokens: usize, model_name: &str) -> GenerateR
         latency_ms: latency,
         tokens_per_sec: tokens as f64 / (latency as f64 / 1000.0).max(0.001),
         is_mock: true,
+        truncated: false,
         model_id: format!("mock/{model_name}"),
     }
 }
@@ -134,12 +138,9 @@ fn embed_tokens(embed: &mut Session, ids: &[i64]) -> Result<Embeddings> {
 /// Zero-filled cache positions prepended to the KV cache and masked out for
 /// the whole generation.
 ///
-/// On the first step the cache is empty, which would make every
-/// `past_key_values.*` input a zero-element tensor. ONNX Runtime's CoreML
-/// provider rejects that outright ("has a dynamic shape ... but the runtime
-/// shape has zero elements"), so the cache instead starts with one padded
-/// position that `attention_mask` masks off. Masked keys contribute nothing
-/// after the attention softmax, so the output is unchanged.
+/// Legacy Gemma 3 / 3n convention for CoreML's zero-element restriction.
+/// Gemma 4 must use a genuinely empty cache instead; masking a synthetic
+/// prefix is not equivalent for its exported GQA graph.
 const CACHE_PAD: usize = 1;
 
 /// Build the decoder's inputs for one step, supplying only what the graph
@@ -191,7 +192,10 @@ fn build_decoder_inputs(
         let attention_len = cache_len + seq_len;
         // The leading padded positions stay masked for the whole generation.
         let mut mask = vec![1i64; attention_len];
-        for slot in mask.iter_mut().take(CACHE_PAD.min(attention_len)) {
+        for slot in mask
+            .iter_mut()
+            .take(cache_len.saturating_sub(position).min(attention_len))
+        {
             *slot = 0;
         }
         let t = Tensor::from_array(([1, attention_len], mask))
@@ -248,6 +252,11 @@ async fn try_real_inference(
 ) -> Result<GenerateResult> {
     let start = Instant::now();
     let variant = state.active_variant().await;
+    if variant.chat_format == ChatFormat::Gemma4Turn
+        && super::runtime::selected()? == super::runtime::Provider::CoreMl
+    {
+        anyhow::bail!("このGemma 4 ONNXはCoreML非対応演算と空キャッシュを使います。ONNX Runtime WebGPU EP（標準設定）を使用してください。");
+    }
     let tok_path = variant.tokenizer_path(&state.model_dir);
     let model_path = variant.decoder_path(&state.model_dir);
 
@@ -296,15 +305,25 @@ async fn try_real_inference(
     let eos_token_ids = variant.chat_format.eos_token_ids();
 
     let mut generated_ids: Vec<i64> = Vec::new();
-    let mut current_ids = input_ids.clone();
+    let mut ended = false;
+    // Bound prefill matrix sizes while retaining every prompt token in KV order.
+    const PREFILL_CHUNK: usize = 128;
+    let mut current_ids = input_ids[..input_ids.len().min(PREFILL_CHUNK)].to_vec();
     let mut cache: Option<Vec<(Vec<f32>, Vec<f32>)>> = None;
     // Length of the KV cache including the masked padding, and the position of
     // the next real token (which the padding must not shift).
-    let mut cache_len = CACHE_PAD;
+    // Gemma 4 uses an empty cache with zero-based positions. A synthetic
+    // masked prefix changes the exported GQA attention behavior. WebGPU and
+    // CUDA accept an empty cache; other families retain their padding convention.
+    let mut cache_len = if variant.chat_format == ChatFormat::Gemma4Turn {
+        0
+    } else {
+        CACHE_PAD
+    };
     let mut position = 0usize;
     let mut decode_stream = emit.map(|_| tokenizer.inner().decode_stream(true));
 
-    for _ in 0..max_tokens {
+    while generated_ids.len() < max_tokens {
         let embeddings = match session.embed_session.as_mut() {
             Some(embed) => Some(embed_tokens(embed, &current_ids)?),
             None => None,
@@ -355,7 +374,14 @@ async fn try_real_inference(
         }
         cache = Some(next_cache);
 
+        if position < input_ids.len() {
+            current_ids =
+                input_ids[position..(position + PREFILL_CHUNK).min(input_ids.len())].to_vec();
+            continue;
+        }
+
         if eos_token_ids.contains(&next_id) {
+            ended = true;
             break;
         }
 
@@ -376,13 +402,9 @@ async fn try_real_inference(
         }
     }
 
-    let text = if generated_ids.is_empty() {
-        mock_detokenize(&current_ids)
-    } else {
-        tokenizer
-            .decode(&generated_ids, true)
-            .unwrap_or_else(|_| mock_detokenize(&generated_ids))
-    };
+    // Empty generations and tokenizer errors are not mock responses. Keep
+    // them observable so feature-level guards can reject them.
+    let text = tokenizer.decode(&generated_ids, true)?;
 
     let latency_ms = start.elapsed().as_millis() as u64;
     let tokens_per_sec = generated_ids.len() as f64 / (latency_ms as f64 / 1000.0).max(0.001);
@@ -395,6 +417,7 @@ async fn try_real_inference(
         latency_ms,
         tokens_per_sec,
         is_mock: false,
+        truncated: !ended,
         model_id: variant.display_name.to_string(),
     })
 }

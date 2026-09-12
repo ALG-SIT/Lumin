@@ -72,6 +72,24 @@ impl Default for SessionManager {
     }
 }
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TeacherSessionSnapshot {
+    quiz: Option<Quiz>,
+    join_code: Option<String>,
+}
+
+#[tauri::command]
+pub async fn get_teacher_session(
+    state: State<'_, Mutex<SessionManager>>,
+) -> Result<TeacherSessionSnapshot, String> {
+    let manager = state.lock().await;
+    Ok(TeacherSessionSnapshot {
+        quiz: manager.active_quiz.clone(),
+        join_code: manager.join_code.clone(),
+    })
+}
+
 #[tauri::command]
 pub async fn list_quizzes() -> Result<Vec<Quiz>, String> {
     use crate::lumin_core::demo_data;

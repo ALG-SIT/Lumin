@@ -10,6 +10,7 @@ import {
   questionPrompt,
   secondaryButton,
 } from "../styles/shared.css.ts";
+import type { Quiz } from "./StudentQuiz";
 import {
   connectedStudentsHeader,
   joinCodeCard,
@@ -51,19 +52,6 @@ import {
   subjectLabel,
 } from "./TeacherSessionControl.css.ts";
 
-export interface QuizQuestion {
-  id: string;
-  prompt: string;
-  concept: string;
-}
-
-export interface Quiz {
-  id: string;
-  title: string;
-  subject: string;
-  questions: QuizQuestion[];
-}
-
 export interface Student {
   id: string;
   joined_at: string;
@@ -89,6 +77,15 @@ export function TeacherSessionControl({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    invoke<{ quiz: Quiz | null; joinCode: string | null }>(
+      "get_teacher_session",
+    )
+      .then((session) => {
+        setSelectedQuiz(session.quiz);
+        setJoinCode(session.joinCode);
+        setSessionActive(Boolean(session.joinCode));
+      })
+      .catch((e) => setError(String(e)));
     invoke<Quiz[]>("list_quizzes")
       .then(setQuizzes)
       .catch((e) => setError(`クイズの読み込みに失敗しました: ${e}`));

@@ -143,12 +143,14 @@ export function StudentQuiz({
 
   const [questionIndex, setQuestionIndex] = useState(0);
   const [answer, setAnswer] = useState("");
+  const [lastAnswer, setLastAnswer] = useState("");
   const [hintCount, setHintCount] = useState(0);
   const [feedback, setFeedback] = useState<"idle" | "correct" | "incorrect">(
     "idle",
   );
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isComplete, setIsComplete] = useState(false);
+  const [shownHints, setShownHints] = useState<string[]>([]);
   const [generatedHint, setGeneratedHint] = useState<string | null>(null);
   const [initialWasCorrect, setInitialWasCorrect] = useState<boolean | null>(
     null,
@@ -163,25 +165,30 @@ export function StudentQuiz({
   const progressLabel = `${questionIndex + 1} / ${totalQuestions} 問題目`;
 
   const generateHint = useCallback(
-    async (level: number) => {
+    async (level: number, submittedAnswer = lastAnswer) => {
       try {
         const hint = await invoke<string>("generate_hint", {
-          questionId: question.id,
-          concept: question.concept,
+          questionJson: JSON.stringify(question),
+          studentAnswer: submittedAnswer,
+          previousHints: shownHints.slice(-3),
           hintLevel: level,
         });
         setGeneratedHint(hint);
+        setShownHints((previous) => [...previous, hint]);
       } catch (e) {
         console.error("generate_hint failed", e);
         setGeneratedHint(null);
+        const fallback = question.hints[level - 1] ?? question.hints[0];
+        if (fallback) setShownHints((previous) => [...previous, fallback]);
       }
     },
-    [question],
+    [question, lastAnswer, shownHints],
   );
 
   const handleSubmit = async () => {
     if (isAnalyzing || !answer.trim()) return;
     setIsAnalyzing(true);
+    setLastAnswer(answer);
     setError(null);
 
     try {
@@ -204,7 +211,7 @@ export function StudentQuiz({
         const nextHintCount = hintCount === 0 ? 1 : hintCount;
         setHintCount(nextHintCount);
         setGeneratedHint(null);
-        await generateHint(nextHintCount);
+        await generateHint(nextHintCount, answer);
       }
     } catch (e) {
       setError(String(e));
@@ -219,7 +226,12 @@ export function StudentQuiz({
     setHintCount(nextHintCount);
     setFeedback("idle");
     setGeneratedHint(null);
-    await generateHint(nextHintCount);
+    setIsAnalyzing(true);
+    try {
+      await generateHint(nextHintCount);
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
 
   const handleRetry = () => {
@@ -260,6 +272,8 @@ export function StudentQuiz({
       setIsComplete(true);
     } else {
       setQuestionIndex((i) => i + 1);
+      setShownHints([]);
+      setLastAnswer("");
       setAnswer("");
       setHintCount(0);
       setFeedback("idle");
