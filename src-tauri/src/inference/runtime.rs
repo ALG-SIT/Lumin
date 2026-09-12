@@ -75,6 +75,10 @@ pub fn selected() -> Result<Provider> {
         Ok(Provider::Nnapi)
     } else if cfg!(feature = "xnnpack") {
         Ok(Provider::Xnnpack)
+    } else if cfg!(target_os = "ios") {
+        // WebGPU EP は別の dylib を実行時に登録する必要があり、iOS では同梱できない。
+        // 静的リンクした ONNX Runtime に入っている CoreML が唯一の GPU 経路。
+        Ok(Provider::CoreMl)
     } else {
         Ok(Provider::WebGpu)
     }
@@ -124,13 +128,14 @@ pub fn library_path(plugin: bool) -> Result<PathBuf> {
 pub fn initialize() -> Result<()> {
     INITIALIZED
         .get_or_init(|| {
-            #[cfg(feature = "load-dynamic")]
+            // iOS は静的リンク、それ以外は同梱ライブラリの実行時読み込み。
+            #[cfg(not(target_os = "ios"))]
             {
                 ort::init_from(library_path(false).map_err(|e| e.to_string())?)
                     .map_err(|e| e.to_string())?
                     .commit();
             }
-            #[cfg(not(feature = "load-dynamic"))]
+            #[cfg(target_os = "ios")]
             {
                 ort::init().commit();
             }
