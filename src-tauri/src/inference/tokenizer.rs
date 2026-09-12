@@ -21,6 +21,14 @@ impl GemmaTokenizer {
         Ok(enc.get_ids().iter().map(|&x| x as i64).collect())
     }
 
+    /// Encode a fully rendered prompt for generation.
+    ///
+    /// Special tokens are deliberately off: the prompt already opens with
+    /// [`ChatFormat::BOS`], and Gemma 3's tokenizer would prepend a second one.
+    pub fn encode_prompt(&self, prompt: &str) -> Result<Vec<i64>> {
+        self.encode(prompt, false)
+    }
+
     pub fn decode(&self, ids: &[i64], skip_special_tokens: bool) -> Result<String> {
         let u32_ids: Vec<u32> = ids.iter().map(|&x| x as u32).collect();
         self.inner
@@ -58,17 +66,35 @@ pub enum ChatFormat {
 }
 
 impl ChatFormat {
+    /// Opening token of every Gemma prompt.
+    ///
+    /// It is spelled out in the prompt string rather than left to the
+    /// tokenizer because the two families disagree: Gemma 3's `tokenizer.json`
+    /// has a `TemplateProcessing` post-processor that prepends `<bos>`, while
+    /// Gemma 4's does not. Encoding therefore always runs with
+    /// `add_special_tokens` off (see [`super::generate`]) and this is the one
+    /// place the token comes from - otherwise Gemma 3 starts every prompt with
+    /// a duplicated `<bos>` and Gemma 4 with none.
+    pub const BOS: &'static str = "<bos>";
+
     /// Wrap a user prompt into a single-turn conversation that ends ready for
     /// the model to speak.
     pub fn apply(&self, prompt: &str) -> String {
+        let bos = Self::BOS;
         match self {
             ChatFormat::GemmaTurn => {
-                format!("<bos><start_of_turn>user\n{prompt}<end_of_turn>\n<start_of_turn>model\n")
+                format!("{bos}<start_of_turn>user\n{prompt}<end_of_turn>\n<start_of_turn>model\n")
             }
             ChatFormat::Gemma4Turn => {
-                format!("<bos><|turn>user\n{prompt}<turn|>\n<|turn>model\n")
+                format!("{bos}<|turn>user\n{prompt}<turn|>\n<|turn>model\n")
             }
         }
+    }
+
+    /// A prompt sent without a chat template. It still has to open with
+    /// `<bos>`, which the tokenizer no longer supplies.
+    pub fn apply_raw(prompt: &str) -> String {
+        format!("{}{prompt}", Self::BOS)
     }
 
     /// Token ids that end the model's turn, from each family's
@@ -115,6 +141,21 @@ mod tests {
         // Mixing them is the bug this enum exists to prevent.
         assert!(!g4.contains("<start_of_turn>"));
         assert!(!g3.contains("<|turn>"));
+    }
+
+    #[test]
+    fn every_prompt_opens_with_exactly_one_bos() {
+        // Gemma 3's tokenizer prepends <bos> on its own, Gemma 4's does not,
+        // so the token lives in the prompt string and encoding runs with
+        // add_special_tokens off.
+        for rendered in [
+            ChatFormat::GemmaTurn.apply("やあ"),
+            ChatFormat::Gemma4Turn.apply("やあ"),
+            ChatFormat::apply_raw("やあ"),
+        ] {
+            assert!(rendered.starts_with(ChatFormat::BOS), "{rendered}");
+            assert_eq!(rendered.matches(ChatFormat::BOS).count(), 1, "{rendered}");
+        }
     }
 
     #[test]

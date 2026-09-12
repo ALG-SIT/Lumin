@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 
 use super::catalog::Architecture;
 use super::session::{has_input, kv_layer_specs, AppState, KvLayerSpec};
-use super::tokenizer::{load_tokenizer, mock_detokenize};
+use super::tokenizer::{load_tokenizer, mock_detokenize, ChatFormat};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GenerateOptions {
@@ -36,7 +36,7 @@ pub async fn generate_text(state: &AppState, opts: GenerateOptions) -> Result<Ge
     let prompt = if use_template {
         variant.chat_format.apply(&opts.prompt)
     } else {
-        opts.prompt.clone()
+        ChatFormat::apply_raw(&opts.prompt)
     };
 
     // Mock path when the selected model is not fully installed - allows UI
@@ -252,7 +252,7 @@ async fn try_real_inference(
     let model_path = variant.decoder_path(&state.model_dir);
 
     let tokenizer = load_tokenizer(&tok_path)?;
-    let input_ids = tokenizer.encode(prompt, true)?;
+    let input_ids = tokenizer.encode_prompt(prompt)?;
     let prompt_tokens = input_ids.len();
 
     // Load or reuse session; a model switch clears it, so a stale variant here
@@ -433,7 +433,7 @@ pub async fn generate_stream(
     let prompt = if opts.use_chat_template.unwrap_or(true) {
         state.active_variant().await.chat_format.apply(&opts.prompt)
     } else {
-        opts.prompt.clone()
+        ChatFormat::apply_raw(&opts.prompt)
     };
     try_real_inference(state, &prompt, max_tokens, Some(&emit)).await
 }
@@ -470,8 +470,25 @@ mod tests {
     #[tokio::test]
     #[ignore]
     async fn real_streaming_inference_smoke() {
+        streaming_smoke("1b-int4").await;
+    }
+
+    /// The streaming path re-decodes token by token, so it depends on the
+    /// tokenizer rather than the decoder graph; Gemma 4 ships a different one
+    /// and needs its own run.
+    #[tokio::test]
+    #[ignore]
+    async fn gemma4_e4b_streaming_smoke() {
+        streaming_smoke("4-e4b-int4").await;
+    }
+
+    async fn streaming_smoke(variant: &str) {
         let state = AppState::new(std::path::PathBuf::from("../models"));
-        state.set_active_variant("1b-int4").await.unwrap();
+        state.set_active_variant(variant).await.unwrap();
+        assert!(
+            state.active_model_ready().await,
+            "{variant} is not installed"
+        );
         let opts = GenerateOptions {
             prompt: "こんにちは".to_string(),
             max_tokens: Some(8),
@@ -488,6 +505,7 @@ mod tests {
         .await
         .expect("real streaming inference");
 
+        println!("[{variant} stream] {}", result.text);
         assert!(!result.is_mock);
         assert!(!result.text.is_empty());
         let streamed = emitted.lock().unwrap().concat();
@@ -518,11 +536,23 @@ mod tests {
     #[tokio::test]
     #[ignore]
     async fn gemma4_e2b_long_generation_smoke() {
+        gemma4_long_generation_smoke("4-e2b-int4").await;
+    }
+
+    /// Same for E4B: its KV geometry differs from E2B's (24 cached layers
+    /// against 15), so the cache path has to be exercised on both.
+    #[tokio::test]
+    #[ignore]
+    async fn gemma4_e4b_long_generation_smoke() {
+        gemma4_long_generation_smoke("4-e4b-int4").await;
+    }
+
+    async fn gemma4_long_generation_smoke(variant: &str) {
         let state = AppState::new(std::path::PathBuf::from("../models"));
-        state.set_active_variant("4-e2b-int4").await.unwrap();
+        state.set_active_variant(variant).await.unwrap();
         assert!(
             state.active_model_ready().await,
-            "4-e2b-int4 is not installed"
+            "{variant} is not installed"
         );
 
         let result = generate_text(
@@ -539,7 +569,7 @@ mod tests {
         .expect("real inference");
 
         println!(
-            "[4-e2b-int4 long] {} tok in {} ms\n{}",
+            "[{variant} long] {} tok in {} ms\n{}",
             result.generated_tokens, result.latency_ms, result.text
         );
 
@@ -555,6 +585,35 @@ mod tests {
             chars.len(),
             result.text
         );
+    }
+
+    /// The `<bos>` duplication this guards against is invisible in the
+    /// rendered prompt - it only appears once the family's tokenizer has run,
+    /// so it needs the real tokenizer files.
+    #[tokio::test]
+    #[ignore]
+    async fn installed_tokenizers_emit_exactly_one_bos() {
+        let model_root = std::path::PathBuf::from("../models");
+        let mut checked = 0;
+        for variant in super::super::catalog::VARIANTS {
+            if !variant.is_installed(&model_root) {
+                continue;
+            }
+            let tokenizer = load_tokenizer(variant.tokenizer_path(&model_root)).unwrap();
+            let ids = tokenizer
+                .encode_prompt(&variant.chat_format.apply("こんにちは"))
+                .unwrap();
+            let bos = tokenizer.encode(ChatFormat::BOS, false).unwrap();
+            assert_eq!(bos.len(), 1, "{} tokenizes <bos> oddly", variant.id);
+            assert_eq!(ids.first(), bos.first(), "{} lost its <bos>", variant.id);
+            assert_ne!(
+                ids[1], bos[0],
+                "{} starts with a duplicated <bos>",
+                variant.id
+            );
+            checked += 1;
+        }
+        assert!(checked > 0, "no variant installed under ../models");
     }
 
     async fn gemma4_smoke(variant: &str) {
