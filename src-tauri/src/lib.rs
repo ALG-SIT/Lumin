@@ -122,7 +122,7 @@ async fn download_model(
     variant: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<DownloadResult, String> {
-    let v = variant.unwrap_or_else(|| "1b-int4".to_string());
+    let v = variant.unwrap_or_else(|| inference::catalog::DEFAULT_VARIANT_ID.to_string());
     state.download_cancelled.store(false, Ordering::SeqCst);
     inference::model_download::download_model_with_progress(
         app,
@@ -422,6 +422,8 @@ pub fn run() {
             bench_inference,
             download_model,
             inference::list_models,
+            inference::set_active_model,
+            inference::get_active_model,
             inference::import_model,
             inference::cancel_download,
             ai::commands::analyze_answer,

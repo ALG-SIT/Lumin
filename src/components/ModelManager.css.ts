@@ -160,3 +160,45 @@ export const importHint = style({
   fontSize: "0.875rem",
   marginBottom: "var(--space-3)",
 });
+
+// --- Model selection (Gemma 3 / 3n / 4 variants) ---------------------------
+// New surface: the list is grouped by family and one variant is the active
+// model, so these have no index.css ancestor to mirror.
+
+export const familyGroup = style({
+  marginBottom: "var(--space-5)",
+});
+
+export const familyHeading = style({
+  margin: "0 0 var(--space-3) 0",
+  fontSize: "0.8125rem",
+  fontWeight: "700",
+  letterSpacing: "0.06em",
+  textTransform: "uppercase",
+  color: "var(--color-muted)",
+});
+
+// The active model is outlined rather than filled, so the "installed" and
+// "in use" states stay readable at the same time.
+export const activeCard = style({
+  outline: "2px solid var(--lumin-indigo)",
+  outlineOffset: "-2px",
+});
+
+export const activeBadge = style({
+  display: "inline-block",
+  marginLeft: "var(--space-2)",
+  padding: "var(--space-1) var(--space-2)",
+  borderRadius: "9999px",
+  background: "var(--lumin-indigo)",
+  color: "white",
+  fontSize: "0.75rem",
+  fontWeight: "700",
+});
+
+export const modelDescription = style({
+  marginTop: "var(--space-1)",
+  color: "var(--color-muted)",
+  fontSize: "0.875rem",
+  fontWeight: "400",
+});

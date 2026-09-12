@@ -10,11 +10,16 @@ import {
   progressFill,
 } from "../styles/shared.css.ts";
 import {
+  activeBadge,
+  activeCard,
   badge,
+  familyGroup,
+  familyHeading,
   importHint,
   importSection,
   modelActions,
   modelCard,
+  modelDescription,
   modelMeta,
   modelName,
   statusBadge,
@@ -25,9 +30,12 @@ interface ModelEntry {
   name: string;
   size_bytes: number;
   variant: string;
+  family: string;
+  description: string;
   status: "installed" | "downloading" | "available";
   progress?: number;
   recommended?: boolean;
+  active?: boolean;
 }
 
 interface DownloadProgress {
@@ -49,6 +57,7 @@ export function ModelManager() {
   const [progress, setProgress] = useState<ProgressMap>({});
   const [error, setError] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
+  const [switching, setSwitching] = useState(false);
 
   const loadModels = useCallback(async () => {
     try {
@@ -128,6 +137,19 @@ export function ModelManager() {
     }
   };
 
+  const handleSelect = async (variant: string) => {
+    setSwitching(true);
+    setError(null);
+    try {
+      await invoke("set_active_model", { variant });
+      await loadModels();
+    } catch (err) {
+      setError(`モデルの切り替えに失敗しました: ${err}`);
+    } finally {
+      setSwitching(false);
+    }
+  };
+
   const handleImport = async () => {
     setImporting(true);
     setError(null);
@@ -150,7 +172,15 @@ export function ModelManager() {
         return;
       }
 
-      await invoke("import_model", { onnxPath, tokenizerPath });
+      // Import into whichever variant is currently selected, so the files land
+      // in that variant's directory and are checked against its hashes.
+      const activeVariant =
+        models.find((m) => m.active)?.variant ?? models[0]?.variant;
+      await invoke("import_model", {
+        onnxPath,
+        tokenizerPath,
+        variant: activeVariant,
+      });
       await loadModels();
     } catch (err) {
       setError(`モデルの取り込みに失敗しました: ${err}`);
@@ -158,6 +188,8 @@ export function ModelManager() {
       setImporting(false);
     }
   };
+
+  const families = groupByFamily(models);
 
   return (
     <div className={modelManager}>
@@ -167,49 +199,70 @@ export function ModelManager() {
         <div className={emptyState}>モデル情報を取得中…</div>
       )}
 
-      {models.map((model) => (
-        <div key={model.id} className={modelCard}>
-          <div className={modelName}>
-            {model.name}
-            {model.recommended && <span className={badge}>推奨</span>}
-          </div>
+      {families.map(([family, entries]) => (
+        <div key={family} className={familyGroup}>
+          <h3 className={familyHeading}>{family}</h3>
 
-          <div className={modelMeta}>
-            <span>{formatBytes(model.size_bytes)}</span>
-            {model.status === "installed" ? (
-              <span className={statusBadge}>✓ 導入済み</span>
-            ) : (
-              <span>未導入</span>
-            )}
-          </div>
+          {entries.map((model) => (
+            <div
+              key={model.id}
+              className={`${modelCard}${model.active ? ` ${activeCard}` : ""}`}
+            >
+              <div className={modelName}>
+                {model.name}
+                {model.recommended && <span className={badge}>推奨</span>}
+                {model.active && <span className={activeBadge}>使用中</span>}
+                <div className={modelDescription}>{model.description}</div>
+              </div>
 
-          <div className={modelActions}>
-            {model.status === "available" &&
-              downloadingVariant !== model.variant && (
-                <button
-                  type="button"
-                  onClick={() => handleDownload(model.variant)}
-                  disabled={downloadingVariant != null}
-                >
-                  ダウンロード
-                </button>
-              )}
+              <div className={modelMeta}>
+                <span>{formatBytes(model.size_bytes)}</span>
+                {model.status === "installed" ? (
+                  <span className={statusBadge}>✓ 導入済み</span>
+                ) : (
+                  <span>未導入</span>
+                )}
+              </div>
 
-            {downloadingVariant === model.variant && (
-              <>
-                <div className={progressBar}>
-                  <div
-                    className={progressFill}
-                    style={{ width: `${overallPercent()}%` }}
-                  />
-                </div>
-                <span>{overallPercent()}%</span>
-                <button type="button" onClick={handleCancel}>
-                  中止
-                </button>
-              </>
-            )}
-          </div>
+              <div className={modelActions}>
+                {model.status === "installed" && !model.active && (
+                  <button
+                    type="button"
+                    onClick={() => handleSelect(model.variant)}
+                    disabled={switching || downloadingVariant != null}
+                  >
+                    使用する
+                  </button>
+                )}
+
+                {model.status === "available" &&
+                  downloadingVariant !== model.variant && (
+                    <button
+                      type="button"
+                      onClick={() => handleDownload(model.variant)}
+                      disabled={downloadingVariant != null}
+                    >
+                      ダウンロード
+                    </button>
+                  )}
+
+                {downloadingVariant === model.variant && (
+                  <>
+                    <div className={progressBar}>
+                      <div
+                        className={progressFill}
+                        style={{ width: `${overallPercent()}%` }}
+                      />
+                    </div>
+                    <span>{overallPercent()}%</span>
+                    <button type="button" onClick={handleCancel}>
+                      中止
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          ))}
         </div>
       ))}
 
@@ -217,7 +270,7 @@ export function ModelManager() {
         <h3>手元のモデルを取り込む</h3>
         <p className={importHint}>
           ローカルの .onnx と tokenizer.json
-          のペアを選択してください。ファイルは検証された上で保存されます。
+          のペアを選択してください。ファイルは検証された上で、使用中のモデルとして保存されます。
         </p>
         <button
           type="button"
@@ -231,6 +284,20 @@ export function ModelManager() {
       {error && <div className={errorMessage}>{error}</div>}
     </div>
   );
+}
+
+/// Group entries by family, preserving the order the backend sent them in.
+function groupByFamily(models: ModelEntry[]): [string, ModelEntry[]][] {
+  const groups: [string, ModelEntry[]][] = [];
+  for (const model of models) {
+    const existing = groups.find(([family]) => family === model.family);
+    if (existing) {
+      existing[1].push(model);
+    } else {
+      groups.push([model.family, [model]]);
+    }
+  }
+  return groups;
 }
 
 function formatBytes(bytes: number): string {

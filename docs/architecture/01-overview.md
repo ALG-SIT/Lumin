@@ -50,7 +50,7 @@ The React frontend renders two primary modes from a single app.
 
 - **Student View**: question cards, answer input, three-stage hints, retry flow.
 - **Teacher View**: session setup, live aggregate dashboard, next-lesson draft editor, history.
-- **Settings / Model Manager**: download Gemma 3 1B INT4, select execution provider, check disk space.
+- **Settings / Model Manager**: download and switch between the Gemma variants (Gemma 3 1B, Gemma 3n E2B, Gemma 4 E2B / E4B), select execution provider, check disk space.
 
 Frontend code calls Rust through `invoke("command_name")` and listens to events such as `session-discovered`, `analysis-event-ack`, or `download-progress`.
 
@@ -69,7 +69,7 @@ The backend is split into modules by responsibility.
 | Module | Responsibility |
 | --- | --- |
 | `lumin_core` | Question bank, answer analysis, misconception labels, class summaries, lesson-plan drafts |
-| `inference` | `ort` session management, tokenizer, Gemma 3 1B INT4 generation, CPU / GPU execution providers |
+| `inference` | `ort` session management, tokenizer, model catalog, Gemma 3 / 3n / 4 generation, CPU / GPU execution providers |
 | `network` | Teacher HTTP server, student HTTP client, mDNS service discovery, join-code validation |
 | `storage` | App data directory access, offline queue, session history, model cache |
 
@@ -137,13 +137,50 @@ If the network drops, student `AnalysisEvent` objects are queued locally. They a
 
 ## Model and Inference Stack
 
-Planned inference uses Rust `ort` (ONNX Runtime) with the Gemma 3 1B INT4 model.
+Inference uses Rust `ort` (ONNX Runtime). `src-tauri/src/inference/catalog.rs` is
+the single source of truth for the installable models; download specs, on-disk
+layout and the inference wiring are all derived from it.
 
-- Model source: Hugging Face `onnx-community/gemma-3-1b-it-ONNX`
+| Variant | Source repo | Architecture |
+| --- | --- | --- |
+| `1b-int4`, `1b-int8` | `onnx-community/gemma-3-1b-it-ONNX` | decoder-only |
+| `3n-e2b-int4` | `onnx-community/gemma-3n-E2B-it-ONNX` | embed-chained |
+| `4-e2b-int4` | `onnx-community/gemma-4-E2B-it-ONNX` | embed-chained |
+| `4-e4b-int4` | `onnx-community/gemma-4-E4B-it-ONNX` | embed-chained |
+
 - Runtime: `ort` with CPU by default, execution providers switched via Cargo features
 - Execution providers: CoreML on Apple Silicon / iOS, NNAPI / XNNPACK on Android, CUDA / DirectML on desktop where available
 - Tokenizer: SentencePiece-based `tokenizer.json`
-- Model storage: app data directory, verified by SHA256 after download
+- Model storage: app data directory, every file verified by SHA256 after download
+- Active variant: persisted to `active_model.json` in the model root; switching it drops the loaded session so the next generation loads the new graphs
+
+**Decoder-only** models take `input_ids` directly. **Embed-chained** models
+(Gemma 3n and Gemma 4) run an `embed_tokens` graph first and feed its
+`inputs_embeds` and `per_layer_inputs` into the decoder, along with
+`position_ids` and a scalar `num_logits_to_keep`.
+
+KV-cache geometry is read from the decoder graph's declared inputs rather than
+hardcoded: Gemma 4 hides its shared-KV layers (E2B exposes 15 cache entries for
+35 layers, E4B 24 for 42) and gives sliding-window layers twice the head dim of
+full-attention layers.
+
+Chat templates are per-family and not interchangeable: Gemma 3 / 3n use
+`<start_of_turn>` / `<end_of_turn>`, Gemma 4 uses `<|turn>` / `<turn|>`. Passing
+the wrong pair tokenizes the markers as ordinary text, so the model never sees a
+turn boundary and echoes them back in its reply.
+
+The KV cache always carries one leading zero-filled position that
+`attention_mask` masks out. Without it the first step would pass zero-element
+`past_key_values.*` tensors, which ONNX Runtime's CoreML provider rejects.
+Masked keys contribute nothing after the attention softmax, so output is
+unchanged.
+
+Gemma 3n and Gemma 4 are installed into per-variant subdirectories
+(`models/gemma-4-e2b-int4/` and so on). Their external-data files all share
+generic upstream names such as `decoder_model_merged_q4.onnx_data`, and the
+`.onnx` graph references that data by the literal filename recorded at export
+time — so the names cannot be changed, and a shared directory would have one
+variant overwrite another.
 
 The inference module does not call external services. Generation happens entirely on-device.
 
