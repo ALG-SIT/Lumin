@@ -13,11 +13,12 @@ use axum::{
     Json, Router,
 };
 use chrono::Utc;
-use tokio::sync::{watch, RwLock};
+use tauri::Emitter;
+use tokio::sync::{watch, Mutex, RwLock};
 use uuid::Uuid;
 
 use crate::lumin_core::models::{
-    AnalysisEvent, AnalysisEventAck, EndSession, SessionBroadcast, StudentInfo, StudentList,
+    AnalysisEvent, AnalysisEventAck, EndSession, Quiz, SessionBroadcast, StudentInfo, StudentList,
 };
 use crate::network::auth::{generate_join_code, JoinCodeState};
 
@@ -27,7 +28,9 @@ pub struct ServerState {
     pub teacher_token: String,
     pub active_session: RwLock<Option<Uuid>>,
     pub students: RwLock<Vec<StudentInfo>>,
-    pub analysis_events: RwLock<Vec<AnalysisEvent>>,
+    pub analysis_events: Arc<Mutex<Vec<AnalysisEvent>>>,
+    pub quiz: RwLock<Option<Quiz>>,
+    pub event_app: Option<tauri::AppHandle>,
 }
 
 // ── Handlers ─────────────────────────────────────────────────────────────────
@@ -43,6 +46,14 @@ async fn session_info(State(state): State<Arc<ServerState>>) -> Json<serde_json:
     Json(serde_json::json!({
         "session_id": state.session_id,
     }))
+}
+
+async fn resolve_session(
+    State(state): State<Arc<ServerState>>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let session = state.active_session.read().await;
+    let id = session.as_ref().ok_or(StatusCode::GONE)?;
+    Ok(Json(serde_json::json!({ "sessionId": id })))
 }
 
 /// `POST /code` — generate a new random 4-digit join code.
@@ -96,6 +107,7 @@ async fn broadcast_session(
 ) -> Result<StatusCode, StatusCode> {
     let mut session = state.active_session.write().await;
     *session = Some(payload.session_id);
+    *state.quiz.write().await = Some(payload.quiz);
     Ok(StatusCode::OK)
 }
 
@@ -122,8 +134,23 @@ async fn submit_analysis(
     State(state): State<Arc<ServerState>>,
     Json(event): Json<AnalysisEvent>,
 ) -> Result<Json<AnalysisEventAck>, StatusCode> {
-    let mut events = state.analysis_events.write().await;
-    events.push(event.clone());
+    let mut events = state.analysis_events.lock().await;
+    if !state
+        .students
+        .read()
+        .await
+        .iter()
+        .any(|s| s.participant_token == event.participant_token)
+        || event.session_id != *state.active_session.read().await
+    {
+        return Err(StatusCode::FORBIDDEN);
+    }
+    if !events.iter().any(|e| e.id == event.id) {
+        events.push(event.clone());
+        if let Some(app) = &state.event_app {
+            let _ = app.emit("analysis-event", &event);
+        }
+    }
     Ok(Json(AnalysisEventAck {
         event_id: event.id,
         received_at: Utc::now(),
@@ -136,7 +163,7 @@ async fn ack_analysis(
     State(state): State<Arc<ServerState>>,
     Json(payload): Json<AnalysisEventAck>,
 ) -> Result<StatusCode, StatusCode> {
-    let mut events = state.analysis_events.write().await;
+    let mut events = state.analysis_events.lock().await;
     events.retain(|e| e.id != payload.event_id);
     Ok(StatusCode::OK)
 }
@@ -149,7 +176,7 @@ struct StudentJoinBody {
 
 /// `POST /students/join` — register a student for the active session.
 ///
-/// 参加コード(X-Lumin-Join-Code)での認証のみを要求する(セッション照合はコード自体が担う)。
+/// Requires both the join code and the active session UUID.
 async fn students_join(
     State(state): State<Arc<ServerState>>,
     axum::Json(body): axum::Json<StudentJoinBody>,
@@ -165,7 +192,9 @@ async fn students_join(
             connected_at: Utc::now(),
         });
     }
-    Json(serde_json::json!({ "participantToken": token }))
+    Json(
+        serde_json::json!({ "participantToken": token, "sessionId": *state.active_session.read().await, "quiz": *state.quiz.read().await }),
+    )
 }
 
 /// `GET /students` — list connected students.
@@ -207,17 +236,16 @@ async fn session_uuid_middleware(
         .get("X-Lumin-Session-ID")
         .and_then(|v| v.to_str().ok());
 
-    let active_session = state.active_session.read().await;
-
-    match (header_session_id, active_session.as_ref()) {
-        (Some(id), Some(expected)) => {
-            if id == expected.to_string() {
-                Ok(next.run(req).await)
-            } else {
-                Err(StatusCode::FORBIDDEN)
-            }
-        }
-        _ => Err(StatusCode::FORBIDDEN),
+    let matches = state
+        .active_session
+        .read()
+        .await
+        .as_ref()
+        .is_some_and(|expected| header_session_id == Some(expected.to_string().as_str()));
+    if matches {
+        Ok(next.run(req).await)
+    } else {
+        Err(StatusCode::FORBIDDEN)
     }
 }
 
@@ -243,7 +271,9 @@ pub async fn start_server(
         teacher_token: teacher_token.clone(),
         active_session: RwLock::new(None),
         students: RwLock::new(Vec::new()),
-        analysis_events: RwLock::new(Vec::new()),
+        analysis_events: Arc::new(Mutex::new(Vec::new())),
+        quiz: RwLock::new(None),
+        event_app: None,
     });
 
     let app = build_router(state);
@@ -257,6 +287,14 @@ pub async fn start_server(
 pub fn build_router(state: Arc<ServerState>) -> Router {
     // ── Public (unauthenticated) routes ──────────────────────────────────
     let public_routes = Router::new().route("/health", get(health));
+    // A manual join first resolves the UUID using the join code. Every
+    // registration and result submission still requires both credentials.
+    let discovery_routes = Router::new()
+        .route("/session/resolve", get(resolve_session))
+        .layer(middleware::from_fn_with_state(
+            state.join_code.clone(),
+            crate::network::auth::join_code_middleware,
+        ));
 
     // ── Teacher-only management routes (teacher token required) ───────────
     let teacher_routes = Router::new()
@@ -284,6 +322,7 @@ pub fn build_router(state: Arc<ServerState>) -> Router {
         ));
 
     public_routes
+        .merge(discovery_routes)
         .merge(teacher_routes)
         .merge(classroom_routes)
         .with_state(state)
@@ -353,7 +392,9 @@ mod tests {
             teacher_token: "test-token".into(),
             active_session: RwLock::new(Some(Uuid::new_v4())),
             students: RwLock::new(Vec::new()),
-            analysis_events: RwLock::new(Vec::new()),
+            analysis_events: Arc::new(Mutex::new(Vec::new())),
+            quiz: RwLock::new(None),
+            event_app: None,
         })
     }
 
@@ -394,7 +435,9 @@ mod tests {
             teacher_token: "teacher-token".into(),
             active_session: RwLock::new(Some(session_uuid)),
             students: RwLock::new(Vec::new()),
-            analysis_events: RwLock::new(Vec::new()),
+            analysis_events: Arc::new(Mutex::new(Vec::new())),
+            quiz: RwLock::new(None),
+            event_app: None,
         });
         let router = build_router(state.clone());
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -534,6 +577,10 @@ mod tests {
     #[tokio::test]
     async fn test_submit_analysis_with_valid_session_returns_200() {
         let state = test_state();
+        state.students.write().await.push(StudentInfo {
+            participant_token: "tok_abc".into(),
+            connected_at: Utc::now(),
+        });
         let session_id = state.active_session.read().await.unwrap();
 
         let app = Router::new()
@@ -615,5 +662,95 @@ mod tests {
 
         let active_session = state.active_session.read().await;
         assert_eq!(*active_session, Some(new_session_id));
+    }
+    #[tokio::test]
+    async fn manual_join_receives_remote_quiz_and_posts_authenticated_results() {
+        let state = test_state();
+        *state.quiz.write().await = Some(crate::lumin_core::demo_data::demo_quiz_bank().remove(0));
+        let app = build_router(state.clone());
+        let request =
+            |method: &str, path: &str, code: &str, session: &str, body: serde_json::Value| {
+                Request::builder()
+                    .method(method)
+                    .uri(path)
+                    .header("content-type", "application/json")
+                    .header("X-Lumin-Join-Code", code)
+                    .header("X-Lumin-Session-ID", session)
+                    .body(Body::from(body.to_string()))
+                    .unwrap()
+            };
+        let empty = serde_json::json!({});
+        let bad = app
+            .clone()
+            .oneshot(request(
+                "GET",
+                "/session/resolve",
+                "9999",
+                "",
+                empty.clone(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(bad.status(), StatusCode::UNAUTHORIZED);
+        let resolved = app
+            .clone()
+            .oneshot(request(
+                "GET",
+                "/session/resolve",
+                "1234",
+                "",
+                empty.clone(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resolved.status(), StatusCode::OK);
+        let body: serde_json::Value = serde_json::from_slice(
+            &axum::body::to_bytes(resolved.into_body(), 1_000_000)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        let id = body["sessionId"].as_str().unwrap();
+        let missing = app
+            .clone()
+            .oneshot(request("POST", "/students/join", "1234", "", empty.clone()))
+            .await
+            .unwrap();
+        assert_eq!(missing.status(), StatusCode::FORBIDDEN);
+        let joined = app
+            .clone()
+            .oneshot(request("POST", "/students/join", "1234", id, empty.clone()))
+            .await
+            .unwrap();
+        assert_eq!(joined.status(), StatusCode::OK);
+        let joined: serde_json::Value = serde_json::from_slice(
+            &axum::body::to_bytes(joined.into_body(), 1_000_000)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            joined["quiz"]["id"],
+            state.quiz.read().await.as_ref().unwrap().id
+        );
+        assert_eq!(joined["sessionId"], id);
+        let mut event = serde_json::json!({"id": Uuid::new_v4(), "participantToken": joined["participantToken"], "sessionId": id,
+            "questionID":"q1", "concept":"傾き", "misconception":null, "correct":true, "hintCount":0,
+            "retrySuccess":false, "submittedAt":Utc::now().timestamp()});
+        for _ in 0..2 {
+            let response = app
+                .clone()
+                .oneshot(request("POST", "/analysis", "1234", id, event.clone()))
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+        }
+        assert_eq!(state.analysis_events.lock().await.len(), 1);
+        event["participantToken"] = serde_json::json!("unregistered");
+        let response = app
+            .oneshot(request("POST", "/analysis", "1234", id, event))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
     }
 }

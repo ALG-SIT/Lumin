@@ -111,6 +111,7 @@ function ChatView({
 export function TeacherDashboard() {
   const contentRef = useRef<HTMLDivElement>(null);
   const [tab, setTab] = useState<TeacherTab>("dashboard");
+  const [chatVisited, setChatVisited] = useState(false);
   const [sessionCode, setSessionCode] = useState<string | null>(null);
   const [summary, setSummary] = useState<ClassSummary | null>(null);
   const [events, setEvents] = useState<AnalysisEvent[]>([]);
@@ -186,6 +187,7 @@ export function TeacherDashboard() {
                 : sidebarButton
             }
             onClick={() => {
+              if (t.id === "chat") setChatVisited(true);
               setTab(t.id);
               if (contentRef.current) contentRef.current.scrollTop = 0;
             }}
@@ -386,9 +388,18 @@ export function TeacherDashboard() {
             </p>
           </div>
         )}
-        {tab === "chat" && (
-          <ChatView classSummary={summary} activeQuiz={activeQuiz} />
-        )}
+        <div
+          hidden={tab !== "chat"}
+          style={{
+            display: tab === "chat" ? "flex" : "none",
+            flex: 1,
+            minHeight: 0,
+          }}
+        >
+          {chatVisited && (
+            <ChatView classSummary={summary} activeQuiz={activeQuiz} />
+          )}
+        </div>
       </div>
     </section>
   );

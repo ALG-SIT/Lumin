@@ -1,5 +1,4 @@
 import { keyframes, style } from "@vanilla-extract/css";
-import { appBar } from "./App.css.ts";
 
 // The model is app-wide state, not a screen's state, so its status lives in
 // the bar. The chip is a button: the thing you want after seeing "未導入" is
@@ -11,35 +10,22 @@ const pulse = keyframes({
 });
 
 export const modelChip = style({
-  selectors: {
-    [`${appBar} &`]: {
-      display: "flex",
-      flexDirection: "column",
-      alignItems: "flex-start",
-      gap: "3px",
-      minWidth: 0,
-      maxWidth: "min(42vw, 320px)",
-      padding: "5px 12px",
-      background: "rgba(255, 255, 255, 0.16)",
-      border: "1px solid rgba(255, 255, 255, 0.28)",
-      borderRadius: "9999px",
-      color: "white",
-      cursor: "pointer",
-      font: "inherit",
-      textAlign: "left",
-      transition: "background 0.2s ease",
-    },
-    [`${appBar} &:hover`]: {
-      background: "rgba(255, 255, 255, 0.28)",
-    },
-  },
-  "@media": {
-    "(prefers-reduced-motion: reduce)": {
-      selectors: {
-        [`${appBar} &`]: { transition: "none" },
-      },
-    },
-  },
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "flex-start",
+  gap: "4px",
+  minWidth: 0,
+  width: "100%",
+  minHeight: "60px",
+  padding: "12px",
+  color: "var(--lumin-ink)",
+  background: "var(--lumin-canvas)",
+  border: "1px solid var(--lumin-border)",
+  borderRadius: "12px",
+  cursor: "pointer",
+  font: "inherit",
+  textAlign: "left",
+  ":hover": { background: "var(--lumin-indigo-soft)" },
 });
 
 export const modelChipRow = style({
@@ -58,9 +44,12 @@ export const modelChipName = style({
 });
 
 export const modelChipState = style({
+  maxWidth: "100%",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
   fontSize: "0.6875rem",
   whiteSpace: "nowrap",
-  color: "rgba(255, 255, 255, 0.85)",
+  color: "var(--lumin-muted)",
 });
 
 /** Green when usable, amber while loading, grey when not installed. */
@@ -78,7 +67,7 @@ export const modelChipDot = style({
       animationTimingFunction: "ease-in-out",
       animationIterationCount: "infinite",
     },
-    '&[data-state="missing"]': { background: "rgba(255, 255, 255, 0.5)" },
+    '&[data-state="missing"]': { background: "#94a3b8" },
     '&[data-state="error"]': { background: "#f87171" },
   },
   "@media": {
@@ -94,14 +83,14 @@ export const modelChipDot = style({
 export const modelChipTrack = style({
   width: "100%",
   height: "3px",
-  background: "rgba(255, 255, 255, 0.25)",
+  background: "var(--lumin-border)",
   borderRadius: "9999px",
   overflow: "hidden",
 });
 
 export const modelChipFill = style({
   height: "100%",
-  background: "white",
+  background: "var(--lumin-indigo)",
   borderRadius: "9999px",
   transition: "width 0.3s ease",
   "@media": {

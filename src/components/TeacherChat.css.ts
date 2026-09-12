@@ -20,7 +20,7 @@ export const teacherChat = style({
   display: "flex",
   flexDirection: "column",
   flex: "1 1 0",
-  minHeight: "420px",
+  minHeight: 0,
   width: "100%",
   maxWidth: "1000px",
   margin: "0 auto",
@@ -28,8 +28,9 @@ export const teacherChat = style({
   gap: "var(--space-4)",
   background: "var(--lumin-bg)",
   "@media": {
-    "(max-width: 640px)": {
-      padding: "var(--space-3)",
+    "(max-width: 640px), (max-height: 500px)": {
+      padding: "0",
+      gap: "8px",
     },
   },
 });
@@ -39,48 +40,6 @@ const spin = keyframes({
   to: {
     transform: "rotate(360deg)",
   },
-});
-
-// index.css L727-737 + @media 640px L1011-1014.
-export const teacherChatHeader = style({
-  display: "flex",
-  alignItems: "flex-start",
-  justifyContent: "space-between",
-  gap: "var(--space-3)",
-  padding: "var(--space-4) var(--space-5)",
-  background: "var(--lumin-card)",
-  border: "1px solid var(--lumin-border)",
-  borderRadius: "var(--radius-lg)",
-  boxShadow: "var(--shadow-sm)",
-  "@media": {
-    "(max-width: 640px)": {
-      flexDirection: "column",
-      gap: "var(--space-2)",
-    },
-  },
-});
-
-// index.css L739-743 (`.teacher-chat-header h2`, unclassed h2).
-globalStyle(`${teacherChatHeader} h2`, {
-  margin: "0 0 var(--space-1) 0",
-  fontSize: "1.5rem",
-  color: "var(--lumin-ink)",
-});
-
-// index.css L745-749 (`.teacher-chat-header p`, unclassed p).
-globalStyle(`${teacherChatHeader} p`, {
-  margin: "0",
-  color: "var(--lumin-text-secondary)",
-  fontSize: "0.9375rem",
-});
-
-// index.css L751-757.
-export const teacherChatPrivacy = style({
-  display: "flex",
-  alignItems: "center",
-  gap: "var(--space-2)",
-  fontSize: "0.8125rem",
-  color: "var(--lumin-muted)",
 });
 
 // The conversation and the box you write in are one surface.
@@ -100,7 +59,7 @@ export const teacherChatPanel = style({
   flexDirection: "column",
   background: "var(--lumin-card)",
   border: "1px solid var(--lumin-border)",
-  borderRadius: "var(--radius-lg)",
+  borderRadius: "28px",
   boxShadow: "var(--shadow-sm)",
   // The history scrolls inside; without this its rounded corners are painted
   // over by the scrolling content.
@@ -272,6 +231,13 @@ export const teacherChatThinking = style({
 
 // index.css L864-868.
 export const teacherChatSuggestions = style({
+  "@media": {
+    "(max-width: 640px), (max-height: 500px)": {
+      flexWrap: "nowrap",
+      overflowX: "auto",
+      paddingBottom: "4px",
+    },
+  },
   display: "flex",
   flexWrap: "wrap",
   gap: "var(--space-2)",
@@ -282,6 +248,8 @@ export const teacherChatSuggestions = style({
 // rm `&:active` form (0,2,0) still loses to `:active:not(:disabled)` (0,3,0),
 // so the :active scale survives exactly like the source cascade.
 export const teacherChatChip = style({
+  flexShrink: 0,
+  minHeight: "44px",
   padding: "var(--space-2) var(--space-3)",
   fontSize: "0.875rem",
   fontWeight: "500",
@@ -372,7 +340,7 @@ export const teacherChatInput = style({
   color: "var(--lumin-ink)",
   background: "var(--lumin-canvas)",
   border: "1px solid var(--lumin-border)",
-  borderRadius: "var(--radius-md)",
+  borderRadius: "16px",
   outline: "none",
   transition: "border-color 0.2s ease, box-shadow 0.2s ease",
   ":focus": {
@@ -459,4 +427,18 @@ export const teacherChatFooterNote = style({
   fontSize: "0.75rem",
   color: "var(--lumin-muted)",
   textAlign: "center",
+});
+
+globalStyle(
+  `:root[data-keyboard-open] ${teacherChatSuggestions}, :root[data-keyboard-open] ${teacherChatFooterNote}`,
+  {
+    "@media": {
+      "(max-width: 640px), (max-height: 500px)": { display: "none" },
+    },
+  },
+);
+
+// Landscape phones need space for the transcript and composer before focus.
+globalStyle(`${teacherChatSuggestions}, ${teacherChatFooterNote}`, {
+  "@media": { "(max-height: 500px)": { display: "none" } },
 });

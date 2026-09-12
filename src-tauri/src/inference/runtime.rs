@@ -53,7 +53,7 @@ impl Provider {
             Self::CoreMl => "ONNX Runtime / CoreML",
             Self::Nnapi => "ONNX Runtime / NNAPI",
             Self::Xnnpack => "ONNX Runtime / XNNPACK",
-            Self::Cpu => "ONNX Runtime / CPU (explicit)",
+            Self::Cpu => "ONNX Runtime / CPU",
         }
     }
 }
@@ -82,6 +82,19 @@ pub fn selected() -> Result<Provider> {
     } else {
         Ok(Provider::WebGpu)
     }
+}
+
+/// Gemma 4's exported attention/cache graph cannot run in CoreML.
+/// iOS ships CPU kernels in the same static ORT; choose them deliberately
+/// for this family rather than attempting to load a desktop WebGPU dylib.
+pub fn selected_for_variant(variant: &super::catalog::Variant) -> Result<Provider> {
+    if cfg!(target_os = "ios")
+        && variant.chat_format == super::tokenizer::ChatFormat::Gemma4Turn
+        && std::env::var_os("LUMIN_EXECUTION_PROVIDER").is_none()
+    {
+        return Ok(Provider::Cpu);
+    }
+    selected()
 }
 
 pub fn library_path(plugin: bool) -> Result<PathBuf> {

@@ -252,8 +252,12 @@ async fn load_variant_session(
         "モデル本体をメモリに読み込み中…",
         0.0,
     ));
+    let provider = super::runtime::selected_for_variant(variant)?;
     let decoder_path = model_path.clone();
-    let session = blocking_with(move || super::session::create_session(&decoder_path)).await?;
+    let session = blocking_with(move || {
+        super::session::create_session_with_provider(&decoder_path, provider)
+    })
+    .await?;
 
     // Gemma 3n / Gemma 4 decoders take inputs_embeds, so their embed graph
     // is part of the install set; a missing one is a broken install, not a
@@ -272,7 +276,10 @@ async fn load_variant_session(
                 "埋め込みグラフをメモリに読み込み中…",
                 decoder_share,
             ));
-            Some(blocking_with(move || super::session::create_session(&path)).await?)
+            Some(
+                blocking_with(move || super::session::create_session_with_provider(&path, provider))
+                    .await?,
+            )
         }
         Architecture::DecoderOnly => None,
     };
@@ -501,7 +508,7 @@ async fn try_real_inference(
     let start = Instant::now();
     let variant = state.active_variant().await;
     if variant.chat_format == ChatFormat::Gemma4Turn
-        && super::runtime::selected()? == super::runtime::Provider::CoreMl
+        && super::runtime::selected_for_variant(variant)? == super::runtime::Provider::CoreMl
     {
         anyhow::bail!("このGemma 4 ONNXはCoreML非対応演算と空キャッシュを使います。ONNX Runtime WebGPU EP（標準設定）を使用してください。");
     }

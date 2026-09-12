@@ -58,7 +58,16 @@ pub async fn list_models(state: State<'_, AppState>) -> Result<Vec<ModelEntry>, 
                 },
                 variant: v.id.to_string(),
                 family: v.family.to_string(),
-                description: v.description.to_string(),
+                description: if cfg!(target_os = "ios")
+                    && v.chat_format == tokenizer::ChatFormat::Gemma4Turn
+                {
+                    format!(
+                        "{} iPhoneではCPUで実行します。生成に時間がかかります。",
+                        v.description
+                    )
+                } else {
+                    v.description.to_string()
+                },
                 status: if installed {
                     "installed".to_string()
                 } else {
@@ -99,7 +108,16 @@ pub async fn set_active_model(
         },
         variant: v.id.to_string(),
         family: v.family.to_string(),
-        description: v.description.to_string(),
+        description: if cfg!(target_os = "ios")
+            && v.chat_format == tokenizer::ChatFormat::Gemma4Turn
+        {
+            format!(
+                "{} iPhoneではCPUで実行します。生成に時間がかかります。",
+                v.description
+            )
+        } else {
+            v.description.to_string()
+        },
         status: if installed {
             "installed".to_string()
         } else {

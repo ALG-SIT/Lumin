@@ -17,14 +17,12 @@ import {
   teacherChatError,
   teacherChatFooter,
   teacherChatFooterNote,
-  teacherChatHeader,
   teacherChatHistory,
   teacherChatInput,
   teacherChatInputRow,
   teacherChatMessage,
   teacherChatMessageRole,
   teacherChatPanel,
-  teacherChatPrivacy,
   teacherChatSend,
   teacherChatSuggestions,
   teacherChatWelcome,
@@ -96,14 +94,6 @@ function SendIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" {...props}>
       <path d="M3.5 13.09 20.5 4.5 12 20.5l-1.64-5.64L3.5 13.09z" />
-    </svg>
-  );
-}
-
-function LockIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" {...props}>
-      <path d="M12 2a5 5 0 0 0-5 5v3H5v11h14V10h-2V7a5 5 0 0 0-5-5zm3 8H9V7a3 3 0 0 1 6 0v3z" />
     </svg>
   );
 }
@@ -193,6 +183,7 @@ export function TeacherChat({ classSummary, activeQuiz }: TeacherChatProps) {
   const [error, setError] = useState<string | null>(null);
   const historyRef = useRef<HTMLDivElement>(null);
   const followLatest = useRef(true);
+  const sending = useRef(false);
 
   const generationElapsed = useElapsed(loading);
 
@@ -203,6 +194,16 @@ export function TeacherChat({ classSummary, activeQuiz }: TeacherChatProps) {
       history.scrollTop = history.scrollHeight;
     }
   }, [messages, streamed, loading]);
+
+  useEffect(() => {
+    const history = historyRef.current;
+    if (!history || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => {
+      if (followLatest.current) history.scrollTop = history.scrollHeight;
+    });
+    observer.observe(history);
+    return () => observer.disconnect();
+  }, []);
 
   // Loading a model into memory takes tens of seconds even when the files are
   // already on disk, so it starts as soon as the chat opens and reports its
@@ -236,7 +237,8 @@ export function TeacherChat({ classSummary, activeQuiz }: TeacherChatProps) {
 
   const send = useCallback(
     async (text: string) => {
-      if (!text.trim() || loading) return;
+      if (!text.trim() || sending.current) return;
+      sending.current = true;
 
       followLatest.current = true;
       const history = messages;
@@ -277,29 +279,17 @@ export function TeacherChat({ classSummary, activeQuiz }: TeacherChatProps) {
       } finally {
         setStreamed("");
         setPhase(null);
+        sending.current = false;
         setLoading(false);
       }
     },
-    [activeQuiz, classSummary, loading, messages],
+    [activeQuiz, classSummary, messages],
   );
 
   const canSend = input.trim().length > 0 && !loading;
 
   return (
     <section className={teacherChat} aria-label="AIと対話">
-      <header className={teacherChatHeader}>
-        <div>
-          <h2>AI 先生方へ質問</h2>
-          <p>
-            現在の小テストと匿名集計を文脈にして、オンデバイスAIが回答します。
-          </p>
-        </div>
-        <span className={teacherChatPrivacy}>
-          <LockIcon style={{ width: 16, height: 16, flexShrink: 0 }} />
-          個別の解答本文や氏名はAIへ渡しません
-        </span>
-      </header>
-
       {/* Transcript, suggestions and composer are one surface: two cards with
           a gap between them spent the height the conversation needs. */}
       <div className={teacherChatPanel}>
@@ -407,6 +397,16 @@ export function TeacherChat({ classSummary, activeQuiz }: TeacherChatProps) {
               <button
                 type="button"
                 className={teacherChatSend}
+                onPointerDown={(event) => {
+                  // Keep the keyboard and its layout stable through touch release.
+                  event.preventDefault();
+                }}
+                onPointerUp={(event) => {
+                  if (event.pointerType === "touch") {
+                    event.preventDefault();
+                    void send(input);
+                  }
+                }}
                 onClick={() => send(input)}
                 disabled={!canSend}
                 aria-label="質問を送信"
@@ -414,8 +414,6 @@ export function TeacherChat({ classSummary, activeQuiz }: TeacherChatProps) {
                 <SendIcon />
               </button>
             </div>
-            {/* The privacy line is already stated in the header with the lock;
-                only the part the teacher has to act on is repeated here. */}
             <p className={teacherChatFooterNote}>
               提案は先生が確認して利用してください。
             </p>

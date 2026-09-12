@@ -6,7 +6,8 @@ use tauri::{AppHandle, State};
 use tokio::sync::{watch, Mutex};
 use uuid::Uuid;
 
-use crate::lumin_core::models::{Quiz, StudentInfo};
+use crate::inference::session::AppState;
+use crate::lumin_core::models::{AnalysisEvent, Quiz, StudentInfo};
 use crate::lumin_core::LessonPlan;
 use crate::network::auth::{generate_join_code, JoinCodeState};
 use crate::network::dns_sd::{advertise_teacher, stop_advertise};
@@ -45,6 +46,38 @@ pub struct SessionManager {
     session_id: Option<Uuid>,
     join_code: Option<String>,
     last_adopted_plan: Option<LessonPlan>,
+    student_connection: Option<StudentConnection>,
+}
+
+#[derive(Clone)]
+struct StudentConnection {
+    base: String,
+    session_id: Uuid,
+    join_code: String,
+    participant_token: String,
+}
+
+impl SessionManager {
+    pub async fn send_student_analysis(&self, mut event: AnalysisEvent) -> Result<(), String> {
+        let connection = self
+            .student_connection
+            .as_ref()
+            .ok_or("教室に参加し直してください")?;
+        event.session_id = Some(connection.session_id);
+        event.participant_token = connection.participant_token.clone();
+        reqwest::Client::new()
+            .post(format!("{}/analysis", connection.base))
+            .timeout(std::time::Duration::from_secs(10))
+            .header("X-Lumin-Join-Code", &connection.join_code)
+            .header("X-Lumin-Session-ID", connection.session_id.to_string())
+            .json(&event)
+            .send()
+            .await
+            .map_err(|e| format!("結果を送信できませんでした: {e}"))?
+            .error_for_status()
+            .map_err(|e| format!("結果を送信できませんでした: {e}"))?;
+        Ok(())
+    }
 }
 
 impl SessionManager {
@@ -58,6 +91,7 @@ impl SessionManager {
             session_id: None,
             join_code: None,
             last_adopted_plan: None,
+            student_connection: None,
         }
     }
 
@@ -117,14 +151,34 @@ pub async fn student_join(
         .timeout(std::time::Duration::from_secs(5))
         .build()
         .map_err(|e| format!("HTTPクライアント初期化に失敗しました: {e}"))?;
-    let mut req = client
+    let session_id = match session_id.filter(|s| !s.is_empty()) {
+        Some(id) => id,
+        None => {
+            let response = client
+                .get(format!("{base}/session/resolve"))
+                .header("X-Lumin-Join-Code", &join_code)
+                .send()
+                .await
+                .map_err(|e| format!("教師端末へ接続できませんでした: {e}"))?;
+            if response.status() == StatusCode::UNAUTHORIZED {
+                return Err("参加コードが正しくありません".into());
+            }
+            let body: serde_json::Value = response
+                .error_for_status()
+                .map_err(|e| e.to_string())?
+                .json()
+                .await
+                .map_err(|e| e.to_string())?;
+            body["sessionId"]
+                .as_str()
+                .ok_or("教室の情報が取得できませんでした")?
+                .to_owned()
+        }
+    };
+    let req = client
         .post(format!("{base}/students/join"))
-        .header("X-Lumin-Join-Code", &join_code);
-    // 発見経路ではセッションUUID付き。手動入力(sessionId="")では省略。
-    let session_id = session_id.filter(|s| !s.is_empty());
-    if let Some(id) = session_id {
-        req = req.header("X-Lumin-Session-ID", id);
-    }
+        .header("X-Lumin-Join-Code", &join_code)
+        .header("X-Lumin-Session-ID", &session_id);
 
     let resp = req
         .json(&serde_json::json!({}))
@@ -141,17 +195,20 @@ pub async fn student_join(
             if let Some(obj) = body.as_object_mut() {
                 obj.insert("host".into(), serde_json::Value::String(host));
                 obj.insert("port".into(), serde_json::Value::from(port));
-                // 配信中クイズを学生へ届ける(main実装の activeQuiz 相当)
-                let manager = _manager.lock().await;
-                obj.insert(
-                    "quiz".to_string(),
-                    manager
-                        .active_quiz
-                        .clone()
-                        .map_or(serde_json::Value::Null, |q| {
-                            serde_json::to_value(q).expect("quiz serializable")
-                        }),
-                );
+                let token = obj
+                    .get("participantToken")
+                    .and_then(|v| v.as_str())
+                    .ok_or("参加情報が不正です")?
+                    .to_owned();
+                if obj.get("quiz").is_none_or(|q| q.is_null()) {
+                    return Err("小テストが配信されていません".into());
+                }
+                _manager.lock().await.student_connection = Some(StudentConnection {
+                    base,
+                    session_id: Uuid::parse_str(&session_id).map_err(|e| e.to_string())?,
+                    join_code,
+                    participant_token: token,
+                });
             }
             Ok(body)
         }
@@ -164,6 +221,7 @@ pub async fn student_join(
 pub async fn start_session(
     app: AppHandle,
     quiz_id: String,
+    inference: State<'_, AppState>,
     state: State<'_, Mutex<SessionManager>>,
 ) -> Result<String, String> {
     let mut manager = state.lock().await;
@@ -190,7 +248,9 @@ pub async fn start_session(
         teacher_token: Uuid::new_v4().to_string(),
         active_session: tokio::sync::RwLock::new(Some(session_id)),
         students: tokio::sync::RwLock::new(Vec::new()),
-        analysis_events: tokio::sync::RwLock::new(Vec::new()),
+        analysis_events: inference.events.clone(),
+        quiz: tokio::sync::RwLock::new(Some(quiz.clone())),
+        event_app: Some(app.clone()),
     });
 
     let (shutdown_tx, shutdown_rx) = watch::channel(false);
@@ -209,6 +269,8 @@ pub async fn start_session(
     .await
     .map_err(|e| format!("教室の通知に失敗しました: {e}"))?;
 
+    inference.events.lock().await.clear();
+    *inference.active_quiz.lock().await = Some(quiz.clone());
     manager.server_state = Some(server_state);
     manager.server_handle = Some(handle);
     manager.server_shutdown = Some(shutdown_tx);

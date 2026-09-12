@@ -9,6 +9,7 @@ export const settings = style({
   flexDirection: "column",
   flex: "1 1 0",
   minHeight: 0,
+  height: "100%",
   width: "100%",
   maxWidth: "1000px",
   margin: "0 auto",
@@ -23,6 +24,11 @@ export const settings = style({
 });
 
 export const settingsHeader = style({
+  position: "sticky",
+  top: "-12px",
+  zIndex: 1,
+  background: "var(--lumin-bg)",
+  paddingBottom: "12px",
   display: "flex",
   alignItems: "flex-start",
   justifyContent: "space-between",
@@ -60,7 +66,8 @@ globalStyle(`${settingsSection} h3`, {
 
 export const systemGrid = style({
   display: "grid",
-  gridTemplateColumns: "auto 1fr",
+  gridTemplateColumns: "auto minmax(0, 1fr)",
+  "@media": { "(max-width: 640px)": { gridTemplateColumns: "minmax(0, 1fr)" } },
   gap: "var(--space-2) var(--space-4)",
   margin: 0,
   fontSize: "0.875rem",
@@ -75,4 +82,10 @@ globalStyle(`${systemGrid} dd`, {
   color: "var(--lumin-ink)",
   overflowWrap: "anywhere",
   fontVariantNumeric: "tabular-nums",
+});
+
+globalStyle(`${settingsHeader} > button`, {
+  flexShrink: 0,
+  whiteSpace: "nowrap",
+  minHeight: "44px",
 });

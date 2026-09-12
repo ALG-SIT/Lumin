@@ -272,9 +272,15 @@ impl AppState {
 
 /// Create an ort session with platform-appropriate execution providers
 pub fn create_session<P: AsRef<Path>>(model_path: P) -> Result<Session> {
+    create_session_with_provider(model_path, super::runtime::selected()?)
+}
+
+pub fn create_session_with_provider<P: AsRef<Path>>(
+    model_path: P,
+    provider: super::runtime::Provider,
+) -> Result<Session> {
     use super::runtime::{self, Provider};
     runtime::initialize()?;
-    let provider = runtime::selected()?;
     let err = |e: ort::Error<ort::session::builder::SessionBuilder>| anyhow::anyhow!(e.to_string());
     let mut builder = Session::builder()?
         .with_optimization_level(GraphOptimizationLevel::Level3)

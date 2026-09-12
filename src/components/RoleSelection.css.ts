@@ -191,3 +191,35 @@ export const trustLabels = style({
   color: "var(--lumin-text-secondary)",
   fontSize: "0.85rem",
 });
+
+// Keep all three entry points discoverable on a phone without oversized cards.
+const phone = "(max-width: 640px)";
+globalStyle(`${roleSelection}`, {
+  "@media": { [phone]: { padding: "12px", justifyContent: "flex-start" } },
+});
+globalStyle(`${roleButtons}`, {
+  "@media": { [phone]: { gap: "12px" } },
+});
+globalStyle(`${roleButton}`, {
+  "@media": {
+    [phone]: {
+      flex: "1 1 100%",
+      display: "grid",
+      gridTemplateColumns: "36px minmax(0, 1fr)",
+      gap: "6px 12px",
+      padding: "12px",
+    },
+  },
+});
+globalStyle(`${roleButton} ${roleIcon}`, {
+  "@media": { [phone]: { width: "36px", height: "36px", gridRow: "1 / 3" } },
+});
+globalStyle(`${roleButton} ${roleTitle}`, {
+  "@media": { [phone]: { fontSize: "1.0625rem" } },
+});
+globalStyle(`${roleButton} ${roleDetail}, ${roleButton} ${roleAction}`, {
+  "@media": { [phone]: { gridColumn: 2 } },
+});
+globalStyle(`${trustLabels}`, {
+  "@media": { [phone]: { marginTop: 0, gap: "4px", fontSize: "0.75rem" } },
+});

@@ -1,7 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
-import { secondaryButton } from "../styles/shared.css.ts";
+import { iconButton } from "./App.css.ts";
 import { ModelManager } from "./ModelManager";
+import { CloseIcon } from "./NavigationIcons";
 import {
   settings,
   settingsHeader,
@@ -19,6 +20,13 @@ interface SystemInfo {
   tauri_version: string;
   ort_available: boolean;
   model_dir: string;
+}
+
+function modelDirectoryLabel(system: SystemInfo) {
+  if (system.platform === "ios") {
+    return "このiPhone内（アプリ専用領域）";
+  }
+  return system.model_dir;
 }
 
 /**
@@ -47,8 +55,14 @@ export function Settings({ onClose }: SettingsProps) {
             モデルの選択と取得は、先生・生徒どちらの画面にも共通で効きます。
           </p>
         </div>
-        <button type="button" className={secondaryButton} onClick={onClose}>
-          閉じる
+        <button
+          type="button"
+          className={iconButton}
+          onClick={onClose}
+          aria-label="閉じる"
+          title="閉じる"
+        >
+          <CloseIcon />
         </button>
       </header>
 
@@ -65,7 +79,11 @@ export function Settings({ onClose }: SettingsProps) {
               {system.platform} / {system.arch}
             </dd>
             <dt>モデルの保存先</dt>
-            <dd>{system.model_dir}</dd>
+            <dd
+              title={system.platform === "ios" ? undefined : system.model_dir}
+            >
+              {modelDirectoryLabel(system)}
+            </dd>
             <dt>推論ランタイム</dt>
             <dd>
               {system.ort_available ? "ONNX Runtime 利用可能" : "利用不可"}

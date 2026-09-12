@@ -63,6 +63,7 @@ globalStyle("*", {
 
 globalStyle("html, body, #root", {
   height: "100%",
+  overflow: "hidden",
 });
 
 globalStyle("body", {
@@ -70,7 +71,7 @@ globalStyle("body", {
     "'Noto Sans JP Variable', -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', sans-serif",
   background: "var(--lumin-bg)",
   color: "var(--lumin-text)",
-  minHeight: "100vh",
+  width: "100%",
   lineHeight: "1.5",
   WebkitFontSmoothing: "antialiased",
   MozOsxFontSmoothing: "grayscale",
@@ -95,17 +96,17 @@ globalStyle("input, textarea", {
 globalStyle("main", {
   flex: "1",
   minHeight: 0,
-  overflowY: "auto",
+  overflow: "hidden",
   padding: "16px",
   maxWidth: "1280px",
   margin: "0 auto",
   width: "100%",
   "@media": {
     "(max-width: 768px)": {
-      padding: "12px",
+      padding: "8px 8px 0",
     },
     "(max-width: 480px)": {
-      padding: "10px",
+      padding: "6px 8px 0",
     },
   },
 });

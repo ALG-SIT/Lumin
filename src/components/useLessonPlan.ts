@@ -142,7 +142,13 @@ export function useLessonPlan(
       setProgress(null);
       setError(null);
       try {
-        const result = await requestPlan(classSummary, quiz, setProgress);
+        const result = await requestPlan(classSummary, quiz, (next) => {
+          setProgress((current) =>
+            next.stage === "done" && current?.stage === "fallback"
+              ? current
+              : next,
+          );
+        });
         // An automatic plan fills in fields the teacher has not claimed; an
         // explicit regenerate is what they asked for, so it always applies.
         if (manual || !edited.current) setPlanState(result);
@@ -151,7 +157,9 @@ export function useLessonPlan(
       } finally {
         inFlight.current = false;
         setBusy(false);
-        setProgress(null);
+        setProgress((current) =>
+          current?.stage === "fallback" ? current : null,
+        );
         setModelLoading(false);
       }
     },

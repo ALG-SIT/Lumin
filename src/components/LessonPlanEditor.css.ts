@@ -52,6 +52,16 @@ export const lessonEditor = style({
   minWidth: 0,
 });
 
+export const fallbackNotice = style({
+  padding: "var(--space-3) var(--space-4)",
+  color: "var(--lumin-ink)",
+  background: "color-mix(in srgb, var(--lumin-warning) 14%, white)",
+  border: "1px solid color-mix(in srgb, var(--lumin-warning) 45%, white)",
+  borderRadius: "var(--radius-md)",
+  fontSize: "0.875rem",
+  lineHeight: 1.6,
+});
+
 globalStyle(`${lessonEditor} .lesson-plan-header`, {
   display: "flex",
   alignItems: "center",
@@ -92,7 +102,7 @@ globalStyle(`${lessonEditor} textarea`, {
   // a stray scrollbar would hide the last line again.
   overflowY: "hidden",
   padding: "8px",
-  fontSize: "14px",
+  fontSize: "16px",
   lineHeight: 1.5,
 });
 globalStyle(`${lessonEditor} .char-count`, {

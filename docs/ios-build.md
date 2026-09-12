@@ -106,7 +106,7 @@ ort = { version = "2.0.0-rc.13", features = ["half", "coreml", "download-binarie
 
 `ort-sys` downloads the iOS static library on first build and links
 `CoreML.framework` automatically. `inference::runtime::selected` therefore
-defaults to CoreML on iOS: the WebGPU provider is a separate shared library
+defaults to CoreML on iOS for compatible models: the WebGPU provider is a separate shared library
 registered at runtime, which cannot be bundled on iOS.
 
 The desktop native libraries stay out of the IPA because `bundle.resources` is
@@ -154,3 +154,19 @@ xcrun devicectl device info files --device <UDID> --domain-type systemCrashLogs 
 xcrun devicectl device copy from --device <UDID> --domain-type systemCrashLogs \
   --source <name>.ips --destination ./crash.ips
 ```
+
+## Gemma 4 on iOS
+
+Gemma 4's ONNX export uses operators and empty KV tensors that the CoreML path cannot handle. `selected_for_variant` selects the CPU provider from the same statically linked ONNX Runtime for Gemma 4 on iOS. Gemma 3 retains CoreML. This is a declared model/platform configuration, not a retry after a GPU error; an explicit `LUMIN_EXECUTION_PROVIDER` still takes precedence. The model catalog explains the CPU execution to the user. Simulator throughput does not establish performance or memory headroom on a physical iPhone.
+
+## Xcode 27 simulator deployment
+
+Device Hub replaces the Simulator UI in Xcode 27. Tauri's automatic `ios dev` device selection can mistake a simulator for a physical device and attempt to install an `iOS` binary, which fails. Build the simulator target explicitly, then install using simctl:
+
+```sh
+bun run tauri ios build --debug --target aarch64-sim --no-sign
+xcrun simctl install <simulator-uuid> src-tauri/gen/apple/build/arm64-sim/Lumin.app
+xcrun simctl launch <simulator-uuid> jp.lumin.learning.app
+```
+
+On repeated builds, the CLI can report `Directory not empty` while moving the finished archive to `arm64-sim/Lumin.app`. The newly built app remains at `src-tauri/gen/apple/build/lumin_iOS.xcarchive/Products/Applications/Lumin.app`. Verify `xcrun vtool -show-build <app>/Lumin` reports `IOSSIMULATOR` before installing that app. Do not use the stale destination from a prior build.

@@ -143,19 +143,11 @@ async fn download_model(
 
 #[tauri::command]
 async fn send_analysis_event(
-    app: tauri::AppHandle,
     event_json: String,
-    state: State<'_, AppState>,
+    manager: State<'_, tokio::sync::Mutex<session::SessionManager>>,
 ) -> Result<(), String> {
     let event: AnalysisEvent = serde_json::from_str(&event_json).map_err(|e| e.to_string())?;
-    {
-        let mut events = state.events.lock().await;
-        events.push(event.clone());
-    }
-    if let Err(e) = app.emit("analysis-event", &event) {
-        eprintln!("[emit] analysis-event failed: {e}");
-    }
-    Ok(())
+    manager.lock().await.send_student_analysis(event).await
 }
 
 #[tauri::command]

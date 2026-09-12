@@ -95,6 +95,7 @@ export const secondaryButton = style({
 
 // index.css L677-684.
 export const errorMessage = style({
+  overflowWrap: "anywhere",
   marginTop: "var(--space-4)",
   padding: "var(--space-3) var(--space-4)",
   background: "#fff1f2",
@@ -260,7 +261,7 @@ export const modelManager = style({
   margin: "0 auto",
   "@media": {
     "(max-width: 768px)": {
-      padding: "var(--space-4)",
+      padding: "0",
     },
   },
 });

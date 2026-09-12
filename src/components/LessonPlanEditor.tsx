@@ -8,6 +8,7 @@ import {
 } from "../styles/shared.css.ts";
 import { ProgressRing } from "./GenerationProgress";
 import {
+  fallbackNotice,
   lessonEditor,
   manualInput,
   planGenerating,
@@ -241,6 +242,12 @@ export function LessonPlanEditor({ draft, onAdopted }: LessonPlanEditorProps) {
       </div>
 
       {error && <p className={errorMessage}>{error}</p>}
+      {!busy && progress?.stage === "fallback" && (
+        <p className={fallbackNotice} role="status">
+          AIの出力形式を確認できなかったため、教材に基づく案を表示しています。
+          内容を確認してから採用してください。
+        </p>
+      )}
 
       <div className="lesson-plan-actions">
         <button

@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { baseInputFocus } from "../styles/global.css.ts";
 import {
   errorMessage,
@@ -141,6 +141,8 @@ export function StudentQuiz({
 }: StudentQuizProps) {
   const quiz = quizProp ?? SAMPLE_QUIZ;
 
+  const eventId = useRef(crypto.randomUUID());
+  const advancing = useRef(false);
   const [questionIndex, setQuestionIndex] = useState(0);
   const [answer, setAnswer] = useState("");
   const [lastAnswer, setLastAnswer] = useState("");
@@ -242,9 +244,9 @@ export function StudentQuiz({
   const sendAnalysisEvent = async (retrySuccess: boolean) => {
     const event = {
       // AnalysisEvent(Rust)の必須フィールド: id / submittedAt(秒)
-      id: crypto.randomUUID(),
+      id: eventId.current,
       participantToken: participantToken ?? `student-${sessionId.slice(0, 8)}`,
-      sessionId: null,
+      sessionId: sessionId || null,
       questionID: question.id,
       concept: question.concept,
       misconception: firstMisconception,
@@ -259,18 +261,32 @@ export function StudentQuiz({
         eventJson: JSON.stringify(event),
       });
     } catch (e) {
-      // The backend may not yet expose this command; log only.
-      console.error("send_analysis_event failed", e);
+      throw new Error(
+        `結果を送信できませんでした。接続を確認して、もう一度お試しください。(${String(e)})`,
+      );
     }
   };
 
   const handleAdvance = async () => {
+    if (isAnalyzing || advancing.current) return;
+    advancing.current = true;
+    setIsAnalyzing(true);
+    setError(null);
     const retrySuccess = initialWasCorrect === false;
-    await sendAnalysisEvent(retrySuccess);
+    try {
+      await sendAnalysisEvent(retrySuccess);
+    } catch (e) {
+      setError(String(e));
+      return;
+    } finally {
+      advancing.current = false;
+      setIsAnalyzing(false);
+    }
 
     if (questionIndex === totalQuestions - 1) {
       setIsComplete(true);
     } else {
+      eventId.current = crypto.randomUUID();
       setQuestionIndex((i) => i + 1);
       setShownHints([]);
       setLastAnswer("");
@@ -338,7 +354,12 @@ export function StudentQuiz({
           placeholder="答えを入力"
           disabled={isAnalyzing || feedback === "correct"}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && !submitDisabled) {
+            if (
+              e.key === "Enter" &&
+              !e.nativeEvent.isComposing &&
+              e.keyCode !== 229 &&
+              !submitDisabled
+            ) {
               void handleSubmit();
             }
           }}

@@ -15,7 +15,9 @@ type PlanProgress =
   | { stage: "prompt"; done: number; total: number; attempt: number }
   | { stage: "generating"; generated: number; max: number; attempt: number }
   | { stage: "validating"; attempt: number }
-  | { stage: "repairing"; reason: string };
+  | { stage: "repairing"; reason: string }
+  | { stage: "fallback"; reason: string }
+  | { stage: "done" };
 
 type ProgressChannel = { onmessage: (message: PlanProgress) => void };
 
@@ -191,6 +193,28 @@ describe("lesson plan generation progress", () => {
       screen.queryByRole("progressbar", { name: "レッスンプランの生成状況" }),
     ).toBeNull();
     expect(screen.getByDisplayValue("一次関数の理解")).toBeDefined();
+  });
+
+  it("keeps the fallback source visible after generation finishes", async () => {
+    const run = pendingGenerations();
+    render(<LessonTab />);
+    await waitFor(() => expect(run.channel()).toBeDefined());
+
+    await act(async () => {
+      run.channel().onmessage({
+        stage: "fallback",
+        reason: "steps must have exactly 4 items",
+      });
+      run.channel().onmessage({ stage: "done" });
+      run.resolveAll(PLAN);
+    });
+
+    expect(screen.getByRole("status").textContent).toContain(
+      "教材に基づく案を表示しています",
+    );
+    expect(
+      screen.queryByRole("progressbar", { name: "レッスンプランの生成状況" }),
+    ).toBeNull();
   });
 
   it("keeps an elapsed time visible for the whole wait", async () => {

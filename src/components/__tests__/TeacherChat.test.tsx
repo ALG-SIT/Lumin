@@ -64,6 +64,29 @@ const summary = {
 };
 
 describe("TeacherChat", () => {
+  it("sends once when a touch release is followed by a synthetic click", () => {
+    invoke.mockReturnValue(new Promise(() => {}));
+    render(<TeacherChat classSummary={summary} activeQuiz={null} />);
+    fireEvent.change(screen.getByPlaceholderText("学習状況について質問"), {
+      target: { value: "追加の質問" },
+    });
+    const button = screen.getByRole("button", { name: "質問を送信" });
+    const release = new Event("pointerup", { bubbles: true, cancelable: true });
+    Object.defineProperty(release, "pointerType", { value: "touch" });
+    fireEvent(button, release);
+    fireEvent.click(button);
+    expect(
+      invoke.mock.calls.filter(([name]) => name === "chat_with_teacher"),
+    ).toHaveLength(1);
+    expect(
+      (
+        screen.getByPlaceholderText(
+          "学習状況について質問",
+        ) as HTMLTextAreaElement
+      ).value,
+    ).toBe("");
+  });
+
   it("does not scroll on mount, follows new messages only inside history and preserves reading position", async () => {
     let resolve!: (text: string) => void;
     invoke.mockReturnValue(
@@ -297,9 +320,9 @@ describe("TeacherChat", () => {
       panel,
     );
 
-    // Below the header there is one surface, not three stacked ones.
+    // The chat has only its conversation surface, with no introductory header.
     const section = container.querySelector("section") as HTMLElement;
-    expect(section.childElementCount).toBe(2);
+    expect(section.childElementCount).toBe(1);
     expect(section.lastElementChild).toBe(panel);
   });
 });

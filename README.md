@@ -95,7 +95,7 @@ bun run ios:dev                            # 実機で起動
 
 生成される Xcode プロジェクト（`src-tauri/gen/apple/`）と署名設定（`src-tauri/tauri.ios.conf.json`）は追跡対象外です。初回起動時は iOS 側で「設定 → 一般 → VPNとデバイス管理 → デベロッパAPP」から信頼が必要です。
 
-手順と背景は `docs/ios-build.md` と `docs/android-build.md` を参照してください。CI でビルドしているのはデスクトップ 3 プラットフォームのみです。iOS は実機（iPhone 17 / iOS 27）で、CoreML による端末内推論まで確認済みです。
+手順と背景は `docs/ios-build.md` と `docs/android-build.md` を参照してください。CI でビルドしているのはデスクトップ 3 プラットフォームのみです。iOSのCoreML推論に加え、Gemma 4 E2BのCPU推論とMacとの教室通信を物理iPhone 17 / iOS 27で確認しています。対象と限界は[追加検証記録](docs/ios-inference-network-ux.md)を参照してください。
 
 ## 開発の始め方
 
@@ -118,7 +118,7 @@ bun run tauri ios dev
 bun run tauri android dev
 ```
 
-`bun run tauri dev` は Vite 開発サーバーと Rust バックエンドを同時に起動します。フロントエンドだけ確認したい場合は `bun run dev` で `http://localhost:1420` を開いてください。Tauri の外で開いた場合は `isTauriEnvironment()` による判定で IPC を伴う操作が無効化され、画面が固まらないようになっています。
+`bun run tauri dev` は Vite 開発サーバーと Rust バックエンドを同時に起動します。フロントエンドだけ確認したい場合は `bun run dev` で `http://localhost:1420` を開いてください。通常のブラウザではネイティブAPIを使えないため、モデル管理・実推論・教室通信の検証にはTauriアプリを使ってください。
 
 ### モデルの取得
 
@@ -206,7 +206,7 @@ Gemma 3 1B は `input_ids` を直接受け取る単一グラフですが、Gemma
 
 先頭の `<bos>` はプロンプト文字列側で付け、トークナイザーの特殊トークン付与は無効にしています。Gemma 3 の `tokenizer.json` は `<bos>` を自動で前置しますが Gemma 4 はしないため、トークナイザー任せにすると Gemma 3 で `<bos>` が二重になり、Gemma 4 では付きません。
 
-Gemma 4 は空の KV キャッシュと 0 始まりの位置で推論します。マスクしたダミーの 1 スロットを前置すると、実モデルで語や記号の重複が生じることを確認したため、Gemma 4 には付けません。Gemma 3 / 3n の既存経路では CoreML のゼロ要素テンソル制限を避けるため、マスク済みスロットを維持しています。Gemma 4 は標準の ONNX Runtime WebGPU EP を使い、Apple Silicon では Metal で実行します。CoreML の明示選択時は非対応を通知し、CPUへ暗黙に切り替えません。
+Gemma 4 は空の KV キャッシュと 0 始まりの位置で推論します。マスクしたダミーの 1 スロットを前置すると、実モデルで語や記号の重複が生じることを確認したため、Gemma 4 には付けません。Gemma 3 / 3n の既存経路では CoreML のゼロ要素テンソル制限を避けるため、マスク済みスロットを維持しています。デスクトップのGemma 4は標準のONNX Runtime WebGPU EPを使い、Apple SiliconではMetalで実行します。iOSのGemma 4はCoreMLで扱えない演算・空キャッシュを含むため、同じONNX RuntimeのCPU経路をモデル別の標準設定として使用します。モデル一覧にもCPU実行と待ち時間の注意を表示します。実行プロバイダを環境変数で明示した場合はその指定を優先し、失敗時の自動切替は行いません。
 
 ### 実機での確認
 
@@ -248,7 +248,7 @@ cargo test --manifest-path src-tauri/Cargo.toml \
 
 採取した実応答は `src/components/__tests__/realReplies.ts` に置き、`MarkdownRealReplies.test.tsx` が実際の Markdown 描画結果（入れ子箇条書きや、モデルごとに異なる箇条書き記号の幅を含む）を検証します。
 
-標準構成は単一の ONNX Runtime とネイティブ WebGPU EP です。Dawn が macOS では Metal、Windows では Direct3D 12、Linux では Vulkan を利用します。ブラウザや別モデル形式・別推論バックエンドは不要です。GPU登録失敗時はエラーとし、CPU実行へ自動切替しません。形状計算など未対応の補助演算は ORT の CPU ノードで実行されます。
+デスクトップの標準構成は単一の ONNX Runtime とネイティブ WebGPU EP です。Dawn が macOS では Metal、Windows では Direct3D 12、Linux では Vulkan を利用します。ブラウザや別モデル形式・別推論バックエンドは不要です。GPU登録失敗時はエラーとし、CPU実行へ自動切替しません。形状計算など未対応の補助演算は ORT の CPU ノードで実行されます。
 
 ```bash
 bun run prepare:runtime  # 初回に公式バイナリを取得・SHA-256検証（Python 3 はビルド時のみ必要）
