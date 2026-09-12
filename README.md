@@ -82,10 +82,20 @@ Bun は `curl -fsSL https://bun.sh/install | bash` でインストールでき�
 
 ### 3) モバイル（オプション）
 
-- **iOS**: Xcode + `rustup target add aarch64-apple-ios aarch64-apple-ios-sim`
+- **iOS**: Xcode 26+ / `rustup target add aarch64-apple-ios aarch64-apple-ios-sim` / `brew install cocoapods xcodegen libimobiledevice`
 - **Android**: Android Studio + SDK + NDK + `cargo install cargo-ndk`
 
-手順は `docs/ios-build.md` と `docs/android-build.md` を参照してください。CI でビルドしているのはデスクトップ 3 プラットフォームのみで、モバイルビルドは引き続き検証中です。
+iOS の最小バージョンは 26.0 です。署名は開発者ごとに違うためリポジトリには含めず、Team ID を渡して初期化します。
+
+```bash
+export APPLE_DEVELOPMENT_TEAM=XXXXXXXXXX   # 署名証明書の OU フィールド
+bun run ios:init                           # Xcode プロジェクトを生成
+bun run ios:dev                            # 実機で起動
+```
+
+生成される Xcode プロジェクト（`src-tauri/gen/apple/`）と署名設定（`src-tauri/tauri.ios.conf.json`）は追跡対象外です。初回起動時は iOS 側で「設定 → 一般 → VPNとデバイス管理 → デベロッパAPP」から信頼が必要です。
+
+手順と背景は `docs/ios-build.md` と `docs/android-build.md` を参照してください。CI でビルドしているのはデスクトップ 3 プラットフォームのみです。iOS は実機（iPhone 17 / iOS 27）で、CoreML による端末内推論まで確認済みです。
 
 ## 開発の始め方
 
