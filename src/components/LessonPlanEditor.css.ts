@@ -1,4 +1,4 @@
-import { globalStyle, style } from "@vanilla-extract/css";
+import { globalStyle, keyframes, style } from "@vanilla-extract/css";
 
 // LessonPlanEditor.tsx batch (plan checkbox 6). Declaration values are
 // verbatim copies of the corresponding src/index.css rules.
@@ -84,9 +84,16 @@ globalStyle(`${lessonEditor} .steps-section`, {
 globalStyle(`${lessonEditor} .steps-section h3`, { gridColumn: "1 / -1" });
 globalStyle(`${lessonEditor} textarea`, {
   resize: "vertical",
-  minHeight: "64px",
+  // The fields size themselves to their content (see AutoTextarea), so this is
+  // only a floor for an empty one. It used to be 64px, which both wasted space
+  // on short fields and still cut long generated text off.
+  minHeight: "44px",
+  // A grown field must not also scroll: the height already fits the text, and
+  // a stray scrollbar would hide the last line again.
+  overflowY: "hidden",
   padding: "8px",
   fontSize: "14px",
+  lineHeight: 1.5,
 });
 globalStyle(`${lessonEditor} .char-count`, {
   alignSelf: "flex-end",
@@ -102,4 +109,69 @@ globalStyle(`${lessonEditor} .lesson-plan-actions`, {
   background: "var(--lumin-bg)",
   padding: "8px 0",
   flexWrap: "wrap",
+});
+
+// Generating a plan has no output to show until it is finished and validated,
+// so the card itself carries the signal: a light sweep across the fields says
+// work is happening even when the exact progress is not knowable.
+const shimmer = keyframes({
+  "0%": { backgroundPosition: "200% 0" },
+  "100%": { backgroundPosition: "-200% 0" },
+});
+
+export const planGenerating = style({
+  position: "relative",
+  selectors: {
+    // The sweep rides over the card without blocking what is underneath, so a
+    // previous plan stays readable while the next one is produced.
+    "&::after": {
+      content: '""',
+      position: "absolute",
+      inset: 0,
+      pointerEvents: "none",
+      borderRadius: "inherit",
+      backgroundImage:
+        "linear-gradient(100deg, transparent 35%, var(--lumin-indigo-soft) 50%, transparent 65%)",
+      backgroundSize: "200% 100%",
+      animationName: shimmer,
+      animationDuration: "1.8s",
+      animationTimingFunction: "linear",
+      animationIterationCount: "infinite",
+      opacity: "0.9",
+    },
+  },
+  "@media": {
+    "(prefers-reduced-motion: reduce)": {
+      selectors: {
+        // No sweep, but the card still reads as busy rather than as finished.
+        "&::after": {
+          animation: "none",
+          backgroundImage: "none",
+          background: "var(--lumin-indigo-soft)",
+          opacity: "0.25",
+        },
+      },
+    },
+  },
+});
+
+// The ring sits over the card, where the plan itself will appear, so starting
+// and finishing a generation never moves anything on the page.
+export const planOverlay = style({
+  position: "absolute",
+  top: "50%",
+  left: "50%",
+  transform: "translate(-50%, -50%)",
+  zIndex: 1,
+  display: "flex",
+  alignItems: "center",
+  maxWidth: "calc(100% - var(--space-6, 32px))",
+  padding: "var(--space-3) var(--space-4)",
+  background: "var(--lumin-card)",
+  border: "1px solid var(--lumin-border)",
+  borderRadius: "var(--radius-lg)",
+  boxShadow: "var(--shadow-sm)",
+  // Readable over an existing plan without taking the fields away from the
+  // teacher: a regeneration does not have to block editing.
+  pointerEvents: "none",
 });

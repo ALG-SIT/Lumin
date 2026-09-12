@@ -7,8 +7,10 @@ import {
   resetButton,
   roleBadge,
 } from "./components/App.css.ts";
+import { AppBarModelStatus } from "./components/AppBarModelStatus";
 import { DemoFlow } from "./components/DemoFlow";
 import { type LuminRole, RoleSelection } from "./components/RoleSelection";
+import { Settings } from "./components/Settings";
 import { type JoinResultPayload, StudentJoin } from "./components/StudentJoin";
 import { StudentQuiz } from "./components/StudentQuiz";
 import { TeacherDashboard } from "./components/TeacherDashboard";
@@ -31,6 +33,7 @@ function SunIcon(props: React.SVGProps<SVGSVGElement>) {
 
 export default function App() {
   const [role, setRole] = useState<Role>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [studentJoined, setStudentJoined] = useState(false);
   const [studentSessionId, setStudentSessionId] = useState("");
   const [participantToken, setParticipantToken] = useState<string | null>(null);
@@ -56,33 +59,44 @@ export default function App() {
           <SunIcon className={brandIcon} />
           Lumin
         </span>
-        {role && (
-          <div
-            style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}
-          >
-            <span className={roleBadge}>現在の役割: {ROLE_LABELS[role]}</span>
-            <button
-              type="button"
-              className={resetButton}
-              onClick={() => setRole(null)}
-            >
-              役割を切り替える
-            </button>
-          </div>
-        )}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "0.75rem",
+            minWidth: 0,
+          }}
+        >
+          {role && (
+            <>
+              <span className={roleBadge}>現在の役割: {ROLE_LABELS[role]}</span>
+              <button
+                type="button"
+                className={resetButton}
+                onClick={() => setRole(null)}
+              >
+                役割を切り替える
+              </button>
+            </>
+          )}
+          {/* The model applies to every role, so its status and the way in to
+              change it sit outside the role-specific controls. */}
+          <AppBarModelStatus onOpenSettings={() => setSettingsOpen(true)} />
+        </div>
       </header>
       <main>
-        {!role && <RoleSelection onSelect={setRole} />}
-        {role === "teacher" && (
-          <TeacherDashboard onReset={() => setRole(null)} />
-        )}
-        {role === "student" && !studentJoined && (
+        {/* Settings covers the work area rather than replacing the role, so
+            closing it returns to exactly where the teacher or student was. */}
+        {settingsOpen && <Settings onClose={() => setSettingsOpen(false)} />}
+        {!settingsOpen && !role && <RoleSelection onSelect={setRole} />}
+        {!settingsOpen && role === "teacher" && <TeacherDashboard />}
+        {!settingsOpen && role === "student" && !studentJoined && (
           <StudentJoin
             onJoined={handleStudentJoined}
             onReset={handleStudentReset}
           />
         )}
-        {role === "student" && studentJoined && (
+        {!settingsOpen && role === "student" && studentJoined && (
           <StudentQuiz
             sessionId={studentSessionId}
             participantToken={participantToken}
@@ -93,7 +107,9 @@ export default function App() {
             onComplete={() => setStudentJoined(false)}
           />
         )}
-        {role === "demo" && <DemoFlow onReset={() => setRole(null)} />}
+        {!settingsOpen && role === "demo" && (
+          <DemoFlow onReset={() => setRole(null)} />
+        )}
       </main>
     </div>
   );

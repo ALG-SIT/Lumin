@@ -9,7 +9,6 @@ import {
   secondaryButton,
 } from "../styles/shared.css.ts";
 import { LessonPlanEditor } from "./LessonPlanEditor";
-import { ModelManager } from "./ModelManager";
 import type { Quiz } from "./StudentQuiz";
 import { TeacherChat } from "./TeacherChat";
 import {
@@ -56,19 +55,19 @@ import {
   teacherSidebar,
 } from "./TeacherDashboard.css.ts";
 import { TeacherSessionControl } from "./TeacherSessionControl";
+import { useLessonPlan } from "./useLessonPlan";
 
-export interface TeacherDashboardProps {
-  onReset?: () => void;
-}
+// The app bar carries the role badge and the way out of it, so the sidebar is
+// only the teacher's own tabs.
+export type TeacherDashboardProps = Record<string, never>;
 
-type TeacherTab = "dashboard" | "session" | "lesson" | "chat" | "models";
+type TeacherTab = "dashboard" | "session" | "lesson" | "chat";
 
 const TABS: { id: TeacherTab; label: string }[] = [
   { id: "dashboard", label: "概要" },
   { id: "session", label: "セッション" },
   { id: "lesson", label: "レッスンプラン" },
   { id: "chat", label: "AIチャット" },
-  { id: "models", label: "モデル管理" },
 ];
 
 interface AnalysisEvent {
@@ -109,7 +108,7 @@ function ChatView({
   return <TeacherChat classSummary={classSummary} activeQuiz={activeQuiz} />;
 }
 
-export function TeacherDashboard({ onReset }: TeacherDashboardProps) {
+export function TeacherDashboard() {
   const contentRef = useRef<HTMLDivElement>(null);
   const [tab, setTab] = useState<TeacherTab>("dashboard");
   const [sessionCode, setSessionCode] = useState<string | null>(null);
@@ -117,6 +116,11 @@ export function TeacherDashboard({ onReset }: TeacherDashboardProps) {
   const [events, setEvents] = useState<AnalysisEvent[]>([]);
   const [isLoadingDemo, setIsLoadingDemo] = useState(false);
   const [activeQuiz, setActiveQuiz] = useState<Quiz | null>(null);
+
+  // The plan and its generation live here, above the tab switch: the editor is
+  // unmounted whenever another tab is shown, and a generation outlives that by
+  // tens of seconds. It only starts once the teacher opens the tab.
+  const lessonPlan = useLessonPlan(summary, activeQuiz, tab === "lesson");
 
   const refreshSummary = useCallback(async () => {
     try {
@@ -190,11 +194,6 @@ export function TeacherDashboard({ onReset }: TeacherDashboardProps) {
             {t.label}
           </button>
         ))}
-        {onReset && (
-          <button type="button" className={sidebarButton} onClick={onReset}>
-            役割を切り替える
-          </button>
-        )}
       </nav>
 
       <div ref={contentRef} className={teacherContent}>
@@ -378,11 +377,7 @@ export function TeacherDashboard({ onReset }: TeacherDashboardProps) {
           />
         )}
         {tab === "lesson" && summary && (
-          <LessonPlanEditor
-            classSummary={summary}
-            quiz={activeQuiz}
-            onAdopted={() => {}}
-          />
+          <LessonPlanEditor draft={lessonPlan} onAdopted={() => {}} />
         )}
         {tab === "lesson" && !summary && (
           <div className={card}>
@@ -391,7 +386,6 @@ export function TeacherDashboard({ onReset }: TeacherDashboardProps) {
             </p>
           </div>
         )}
-        {tab === "models" && <ModelManager />}
         {tab === "chat" && (
           <ChatView classSummary={summary} activeQuiz={activeQuiz} />
         )}

@@ -83,10 +83,35 @@ export const teacherChatPrivacy = style({
   color: "var(--lumin-muted)",
 });
 
-// index.css L759-772 + @media 640px L1020-1022.
+// The conversation and the box you write in are one surface.
+//
+// They used to be two cards with the suggestion chips between them, which cost
+// two borders, two shadows and two gaps of vertical space, and read as three
+// separate things rather than one conversation. Merging them hands that space
+// back to the transcript, which is the part that needs it.
+//
+// DIVERGENCE from index.css: the card treatment (background, border, radius,
+// shadow) moves from the history and the composer onto this wrapper; the
+// pieces below keep only their own spacing.
+export const teacherChatPanel = style({
+  flex: "1 1 0",
+  minHeight: 0,
+  display: "flex",
+  flexDirection: "column",
+  background: "var(--lumin-card)",
+  border: "1px solid var(--lumin-border)",
+  borderRadius: "var(--radius-lg)",
+  boxShadow: "var(--shadow-sm)",
+  // The history scrolls inside; without this its rounded corners are painted
+  // over by the scrolling content.
+  overflow: "hidden",
+});
+
+// index.css L759-772 + @media 640px L1020-1022, minus the card treatment now
+// carried by teacherChatPanel.
 export const teacherChatHistory = style({
   flex: "1 1 auto",
-  minHeight: "80px",
+  minHeight: 0,
   overscrollBehavior: "contain",
   overflowAnchor: "none",
   overflowY: "auto",
@@ -94,13 +119,26 @@ export const teacherChatHistory = style({
   flexDirection: "column",
   gap: "var(--space-3)",
   padding: "var(--space-5)",
-  background: "var(--lumin-card)",
-  border: "1px solid var(--lumin-border)",
-  borderRadius: "var(--radius-lg)",
-  boxShadow: "var(--shadow-sm)",
   "@media": {
     "(max-width: 640px)": {
       padding: "var(--space-3)",
+    },
+  },
+});
+
+// Suggestions and the input share the foot of the same panel, divided from the
+// transcript by a hairline instead of a gap.
+export const teacherChatFooter = style({
+  flexShrink: 0,
+  display: "flex",
+  flexDirection: "column",
+  gap: "var(--space-2)",
+  padding: "var(--space-3) var(--space-4)",
+  borderTop: "1px solid var(--lumin-border)",
+  background: "var(--lumin-card)",
+  "@media": {
+    "(max-width: 640px)": {
+      padding: "var(--space-2) var(--space-3)",
     },
   },
 });
@@ -288,16 +326,12 @@ export const teacherChatChip = style({
   },
 });
 
-// index.css L896-905.
+// index.css L896-905, minus the card treatment now carried by
+// teacherChatPanel: the composer sits inside it.
 export const teacherChatComposer = style({
   display: "flex",
   flexDirection: "column",
-  gap: "var(--space-3)",
-  padding: "var(--space-4)",
-  background: "var(--lumin-card)",
-  border: "1px solid var(--lumin-border)",
-  borderRadius: "var(--radius-lg)",
-  boxShadow: "var(--shadow-sm)",
+  gap: "var(--space-2)",
 });
 
 // index.css L907-913.
