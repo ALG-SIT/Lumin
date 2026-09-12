@@ -25,7 +25,7 @@
     "active": true,
     "targets": "all",
     "iOS": {
-      "minimumSystemVersion": "15.1",
+      "minimumSystemVersion": "26.0",
       "developmentTeam": ""
     },
     "android": {},

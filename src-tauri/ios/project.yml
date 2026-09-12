@@ -2,7 +2,7 @@ name: Lumin
 options:
   bundleIdPrefix: jp.lumin
   deploymentTarget:
-    iOS: "14.0"
+    iOS: "26.0"
 targets:
   Lumin:
     type: application
