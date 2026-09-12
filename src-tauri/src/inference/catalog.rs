@@ -61,6 +61,13 @@ pub struct Variant {
     pub tokenizer_file: &'static str,
     pub files: &'static [FileSpec],
     /// Physical RAM in GB below which the variant is not recommended.
+    ///
+    /// This is device RAM, not the model's footprint: it is the working set
+    /// plus room for the OS and the app. The INT4 E-series working sets are
+    /// small - Google's own figures put Gemma 4 E2B at ~4 GB and E4B at
+    /// ~5.5-6 GB at 4-bit, and an E4B generation measured here peaked at
+    /// 4.4 GB RSS - because Per-Layer Embeddings are looked up rather than
+    /// held resident as active parameters.
     pub min_memory_gb: u64,
 }
 
@@ -214,7 +221,7 @@ pub static VARIANTS: &[Variant] = &[
         decoder_file: "decoder_model_merged_q4.onnx",
         embed_file: Some("embed_tokens_q4.onnx"),
         tokenizer_file: "tokenizer.json",
-        min_memory_gb: 16,
+        min_memory_gb: 8,
         files: &[
             FileSpec {
                 url_path: "onnx/decoder_model_merged_q4.onnx",
@@ -273,7 +280,7 @@ pub static VARIANTS: &[Variant] = &[
         decoder_file: "decoder_model_merged_q4.onnx",
         embed_file: Some("embed_tokens_q4.onnx"),
         tokenizer_file: "tokenizer.json",
-        min_memory_gb: 16,
+        min_memory_gb: 8,
         files: &[
             FileSpec {
                 url_path: "onnx/decoder_model_merged_q4.onnx",
@@ -328,7 +335,7 @@ pub static VARIANTS: &[Variant] = &[
         decoder_file: "decoder_model_merged_q4.onnx",
         embed_file: Some("embed_tokens_q4.onnx"),
         tokenizer_file: "tokenizer.json",
-        min_memory_gb: 24,
+        min_memory_gb: 12,
         files: &[
             FileSpec {
                 url_path: "onnx/decoder_model_merged_q4.onnx",
@@ -437,6 +444,22 @@ mod tests {
             "E4B is the larger model and must ask for more RAM"
         );
         assert!(e4b.download_size_bytes() > e2b.download_size_bytes());
+    }
+
+    /// The recommendation covers the OS and the app as well, so it can never
+    /// sit below what the weights alone occupy.
+    #[test]
+    fn memory_recommendations_clear_the_weights() {
+        for v in VARIANTS {
+            let recommended = v.min_memory_gb * 1024 * 1024 * 1024;
+            assert!(
+                recommended > v.download_size_bytes(),
+                "{} recommends {} GB for {} bytes of weights",
+                v.id,
+                v.min_memory_gb,
+                v.download_size_bytes()
+            );
+        }
     }
 
     #[test]

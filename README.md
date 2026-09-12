@@ -128,9 +128,11 @@ bun run download:model --variant 4-e4b-int4  # Gemma 4 E4B INT4
 | --- | --- | --- |
 | `1b-int4` | 約 0.8 GB | 8 GB 以上 |
 | `1b-int8` | 約 1.0 GB | 8 GB 以上 |
-| `3n-e2b-int4` | 約 3.1 GB | 16 GB 以上 |
-| `4-e2b-int4` | 約 3.4 GB | 16 GB 以上 |
-| `4-e4b-int4` | 約 5.2 GB | 24 GB 以上 |
+| `3n-e2b-int4` | 約 3.1 GB | 8 GB 以上 |
+| `4-e2b-int4` | 約 3.4 GB | 8 GB 以上 |
+| `4-e4b-int4` | 約 5.6 GB | 12 GB 以上 |
+
+推奨メモリは端末の物理メモリで、モデルの占有量そのものではありません（OS とアプリの分を含みます）。E シリーズは Per-Layer Embeddings を都度の参照で使うため、実際の作業セットは小さく収まります。INT4 で Gemma 4 E2B が約 4 GB、E4B が約 5.5〜6 GB というのが公開されている目安で、本リポジトリでの E4B の生成時ピークも 4.4 GB（RSS）でした。
 
 Gemma 3n / Gemma 4 はモデルごとのサブディレクトリ（例 `models/gemma-4-e2b-int4/`）へ配置されます。これらは外部データファイル名が共通のため、同じディレクトリに置くと互いを上書きしてしまうためです。
 
@@ -186,24 +188,28 @@ Gemma 3 1B は `input_ids` を直接受け取る単一グラフですが、Gemma
 
 チャットテンプレートはファミリーごとに異なり、互換性はありません。Gemma 3 / 3n は `<start_of_turn>` / `<end_of_turn>`、Gemma 4 は `<|turn>` / `<turn|>` を使います。誤ったほうを渡すとマーカーが特殊トークンではなく通常の文字列として扱われ、モデルが応答にマーカーをそのまま書き出します。
 
+先頭の `<bos>` はプロンプト文字列側で付け、トークナイザーの特殊トークン付与は無効にしています。Gemma 3 の `tokenizer.json` は `<bos>` を自動で前置しますが Gemma 4 はしないため、トークナイザー任せにすると Gemma 3 で `<bos>` が二重になり、Gemma 4 では付きません。
+
 KV キャッシュの先頭には、常にマスクされるゼロ埋めの 1 スロットを置いています。初回ステップでキャッシュが空だと `past_key_values.*` が要素数 0 のテンソルになり、ONNX Runtime の CoreML プロバイダがこれを拒否するためです（マスク済みのキーは softmax 後に寄与しないので出力は変わりません）。
 
 ### 実機での確認
 
-Apple M5 / 16 GB / macOS（CoreML）で実推論を確認しています。
+Apple M5 / 16 GB および Apple M4 Max / 64 GB の macOS（CoreML）で実推論を確認しています。
 
-| モデル | 生成 | 所要（モデル読み込み含む） |
-| --- | --- | --- |
-| Gemma 3 1B INT4 | 8 トークン | 6.7 秒 |
-| Gemma 4 E2B INT4 | 8 トークン | 13.9 秒 |
-| Gemma 4 E2B INT4 | 64 トークン | 28.5 秒 |
+| モデル | 生成 | 所要（モデル読み込み含む） | 端末 |
+| --- | --- | --- | --- |
+| Gemma 3 1B INT4 | 8 トークン | 6.7 秒 | M5 / 16 GB |
+| Gemma 4 E2B INT4 | 8 トークン | 13.9 秒 | M5 / 16 GB |
+| Gemma 4 E2B INT4 | 64 トークン | 28.5 秒 | M5 / 16 GB |
+| Gemma 4 E4B INT4 | 8 トークン | 16.8 秒 | M4 Max / 64 GB |
+| Gemma 4 E4B INT4 | 64 トークン | 37.2 秒 | M4 Max / 64 GB |
 
-Gemma 4 E4B は未検証です（16 GB 機では推奨メモリに届かないため）。実推論のスモークテストは `#[ignore]` 付きで、モデルを配置したうえで次のように実行します。
+実推論のスモークテストは `#[ignore]` 付きで、モデルを配置したうえで次のように実行します。
 
 ```bash
-bun run download:model --variant 4-e2b-int4
+bun run download:model --variant 4-e4b-int4
 cargo test --manifest-path src-tauri/Cargo.toml --release \
-  gemma4_e2b_long_generation_smoke -- --ignored --nocapture
+  gemma4_e4b_long_generation_smoke -- --ignored --nocapture
 ```
 
 実行プロバイダは Cargo feature で切り替えます。Apple Silicon の macOS ビルドでは CoreML が既定で有効で、未対応ノードは ONNX Runtime の CPU プロバイダへフォールバックします。
