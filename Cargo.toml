@@ -6,3 +6,7 @@ resolver = "2"
 # Xcode 27 の Swift コンパイラで ios/Sources/DnsSdPlugin.swift の型推論が通らないため、
 # NSNull フォールバックの書き方だけを直したローカルフォークを使う。
 tauri-plugin-dns-sd = { path = "vendor/tauri-plugin-dns-sd" }
+# Xcode 27 の SwiftPM は Release 構成の静的ライブラリで @_cdecl シンボルを内部化する。
+# SwiftRs ランタイム（retain_object など）も Tauri アーカイブで公開し直すフォークを使う。
+# これが無いと `tauri ios build`（Release）のリンクだけが失敗する。
+swift-rs = { path = "vendor/swift-rs" }

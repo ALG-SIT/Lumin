@@ -143,6 +143,19 @@ published crate's Swift source does not compile against the Tauri iOS API:
 `NSNull` fallbacks for `host`/`port` need an explicit cast. The fork changes
 only those lines. Upstream has no release with the fix yet.
 
+## Vendored swift-rs
+
+`vendor/swift-rs` is a fork of `swift-rs` 1.0.8, wired in through
+`[patch.crates-io]`. Xcode 27's SwiftPM internalizes `@_cdecl` symbols in
+**Release** static products (Debug keeps them external, so `ios:dev` is
+unaffected). swift-rs promotes each package's own symbols back to global with
+rustup's `llvm-objcopy`, but not the shared SwiftRs runtime (`retain_object`,
+`release_object`, `string_from_bytes`), so a release link failed with
+"Undefined symbols". The fork also promotes those, in the Tauri archive only:
+every plugin archive embeds a copy, and promoting them in more than one crashes
+`ld` with duplicate atoms. Rust bundles each static library into its rlib at
+compile time, so patching an archive by hand after the build has no effect.
+
 ## Troubleshooting
 
 | Symptom | Cause |
@@ -151,6 +164,7 @@ only those lines. Upstream has no release with the fix yet.
 | `exportArchive ... requires a provisioning profile` | `ExportOptions.plist` not patched — run `bun run ios:signing`. |
 | Launch denied, "profile has not been explicitly trusted by the user" | Trust the developer app in Settings (see above). |
 | `Failed to install libimobiledevice` at the end of `ios:dev` | `brew install libimobiledevice`. |
+| `swift-rs: llvm-objcopy not found`, then `Undefined symbols … _init_plugin_*` in a release build | `rustup component add llvm-tools`, then `cargo clean -p swift-rs -p tauri --target aarch64-apple-ios --release` so the build scripts rerun. |
 | App still reports an old `MinimumOSVersion` | The Xcode project is stale; `bun run ios:init` to regenerate. |
 
 Device crash logs can be pulled without Xcode:
