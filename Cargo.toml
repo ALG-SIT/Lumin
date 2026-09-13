@@ -10,3 +10,7 @@ tauri-plugin-dns-sd = { path = "vendor/tauri-plugin-dns-sd" }
 # SwiftRs ランタイム（retain_object など）も Tauri アーカイブで公開し直すフォークを使う。
 # これが無いと `tauri ios build`（Release）のリンクだけが失敗する。
 swift-rs = { path = "vendor/swift-rs" }
+# tao 0.35.3 の application:configurationForConnectingSceneSession:options: が
+# 解放済みの UISceneConfiguration を返し、Release ビルドの iOS アプリが起動直後に落ちる。
+# 返り値を autorelease で渡すよう 1 行だけ直したフォークを使う。
+tao = { path = "vendor/tao" }

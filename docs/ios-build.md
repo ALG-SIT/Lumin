@@ -156,6 +156,16 @@ every plugin archive embeds a copy, and promoting them in more than one crashes
 `ld` with duplicate atoms. Rust bundles each static library into its rlib at
 compile time, so patching an archive by hand after the build has no effect.
 
+## Vendored tao
+
+`vendor/tao` is tao 0.35.3 with a one-line fix, wired in through
+`[patch.crates-io]`. Its `application:configurationForConnectingSceneSession:options:`
+returned `Retained::as_ptr(&config)`, so the `UISceneConfiguration` was released
+before UIKit used it. Debug builds survived because the factory's autoreleased
+copy kept it alive; release builds crash at launch with `EXC_BAD_ACCESS` in
+`objc_retain` under `-[UIApplication _connectUISceneFromFBSScene:transitionContext:]`.
+The fork returns `Retained::autorelease_return(config)`.
+
 ## Troubleshooting
 
 | Symptom | Cause |
@@ -165,6 +175,7 @@ compile time, so patching an archive by hand after the build has no effect.
 | Launch denied, "profile has not been explicitly trusted by the user" | Trust the developer app in Settings (see above). |
 | `Failed to install libimobiledevice` at the end of `ios:dev` | `brew install libimobiledevice`. |
 | `swift-rs: llvm-objcopy not found`, then `Undefined symbols … _init_plugin_*` in a release build | `rustup component add llvm-tools`, then `cargo clean -p swift-rs -p tauri --target aarch64-apple-ios --release` so the build scripts rerun. |
+| Release build crashes at launch, `objc_retain` in `_connectUISceneFromFBSScene` | `tao` not patched — check `[patch.crates-io]` points at `vendor/tao`. |
 | App still reports an old `MinimumOSVersion` | The Xcode project is stale; `bun run ios:init` to regenerate. |
 
 Device crash logs can be pulled without Xcode:
