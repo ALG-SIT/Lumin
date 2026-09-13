@@ -67,6 +67,24 @@ reach. On the first install, iOS refuses to launch an app signed by a personal
 team until you trust it: **Settings → General → VPN & Device Management →
 Developer App → trust**.
 
+## Standalone install (no dev server)
+
+`ios:dev` loads the UI from the Mac's Vite server, so the app stops working
+once the Mac is gone. For a device that runs on its own (iPhone or iPad; the
+project targets both families), build a release IPA with the frontend bundled
+into the binary and install it:
+
+```bash
+bun run ios:build     # → src-tauri/gen/apple/build/arm64/Lumin.ipa
+xcrun devicectl list devices
+unzip -o src-tauri/gen/apple/build/arm64/Lumin.ipa -d /tmp/lumin-ipa
+xcrun devicectl device install app --device <UDID> /tmp/lumin-ipa/Payload/Lumin.app
+```
+
+Release builds need `rustup component add llvm-tools` (see
+[Vendored swift-rs](#vendored-swift-rs)). With a free Apple ID the installed
+app stops launching when its 7-day profile expires; rebuild and reinstall.
+
 ## Simulator and release builds
 
 ```bash

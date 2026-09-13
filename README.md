@@ -90,8 +90,11 @@ iOS の最小バージョンは 26.0 です。署名は開発者ごとに違う�
 ```bash
 export APPLE_DEVELOPMENT_TEAM=XXXXXXXXXX   # 署名証明書の OU フィールド
 bun run ios:init                           # Xcode プロジェクトを生成
-bun run ios:dev                            # 実機で起動
+bun run ios:dev                            # 実機で起動（Mac の Vite 開発サーバーに接続）
+bun run ios:build                          # 開発サーバー不要の単体 IPA（要 rustup component add llvm-tools）
 ```
+
+`ios:build` の IPA はフロントエンドを同梱するため、Mac なしで iPhone / iPad 上で動きます。インストール方法は `docs/ios-build.md` の「Standalone install」を参照してください。
 
 生成される Xcode プロジェクト（`src-tauri/gen/apple/`）と署名設定（`src-tauri/tauri.ios.conf.json`）は追跡対象外です。初回起動時は iOS 側で「設定 → 一般 → VPNとデバイス管理 → デベロッパAPP」から信頼が必要です。
 
