@@ -26,8 +26,14 @@ Export your team ID and let the setup script write the untracked files:
 
 ```bash
 export APPLE_DEVELOPMENT_TEAM=XXXXXXXXXX
-bun run ios:init      # ios:signing → tauri ios init → ios:signing
+bun run ios:init      # ios:signing → tauri ios init → ios:signing → ios:icons
 ```
+
+`tauri ios init` fills the asset catalog with Tauri's default icon, so
+`bun run ios:icons` copies the app icon from `src-tauri/icons/ios/` over it.
+Those PNGs are generated from the macOS icon (the 1024px image in
+`icons/icon.icns`) with `tauri icon <png> -o <dir>`, which writes them to
+`<dir>/ios`.
 
 Your team ID is the `OU` field of your signing certificate:
 
