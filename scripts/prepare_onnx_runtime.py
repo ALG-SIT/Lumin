@@ -78,7 +78,9 @@ def main():
         libraries = list(staged.glob("*webgpu*"))
         if not libraries:
             raise RuntimeError("WebGPU native library missing in official archive")
-        metadata = {"lock": fingerprint, "platform": args.platform, "onnxruntime": spec["onnxruntime"], "webgpu": spec["webgpu"], "files": {p.name: digest(p) for p in staged.iterdir()}}
+        if args.platform == "linux-x86_64" and not list(staged.glob("*providers_cuda*")):
+            raise RuntimeError("CUDA EP missing in official Linux archive")
+        metadata = {"lock": fingerprint, "platform": args.platform, "onnxruntime": spec["onnxruntime"], "webgpu": spec["webgpu"], "cuda": args.platform == "linux-x86_64", "files": {p.name: digest(p) for p in staged.iterdir()}}
         (staged / "manifest.json").write_text(json.dumps(metadata, indent=2) + "\n")
         # The directory is generated build output; replace only after full verification.
         if target.exists():

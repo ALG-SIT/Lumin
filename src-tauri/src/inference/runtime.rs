@@ -1,10 +1,49 @@
 //! One ONNX Runtime, with platform execution providers. No model-specific runtime.
 use anyhow::{anyhow, bail, Result};
-use std::{path::PathBuf, sync::OnceLock};
+use std::{path::PathBuf, sync::{Mutex, OnceLock}};
 
 static RESOURCE_DIR: OnceLock<PathBuf> = OnceLock::new();
 static INITIALIZED: OnceLock<std::result::Result<(), String>> = OnceLock::new();
 static WEBGPU_REGISTERED: OnceLock<std::result::Result<(), String>> = OnceLock::new();
+static PROVIDER_STATUS: OnceLock<Mutex<ProviderStatus>> = OnceLock::new();
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderStatus {
+    pub requested: String,
+    pub selected: String,
+    pub is_gpu: bool,
+    pub fallback_reason: Option<String>,
+}
+
+impl Default for ProviderStatus {
+    fn default() -> Self {
+        Self {
+            requested: std::env::var("LUMIN_EXECUTION_PROVIDER").unwrap_or_else(|_| "auto".into()),
+            selected: "未初期化".into(),
+            is_gpu: false,
+            fallback_reason: None,
+        }
+    }
+}
+
+pub fn provider_status() -> ProviderStatus {
+    PROVIDER_STATUS
+        .get_or_init(|| Mutex::new(ProviderStatus::default()))
+        .lock()
+        .map(|status| status.clone())
+        .unwrap_or_default()
+}
+
+pub fn record_provider(provider: Provider, fallback_reason: Option<String>) {
+    let mut status = PROVIDER_STATUS
+        .get_or_init(|| Mutex::new(ProviderStatus::default()))
+        .lock()
+        .expect("provider status mutex poisoned");
+    status.selected = provider.label().into();
+    status.is_gpu = !matches!(provider, Provider::Cpu | Provider::Xnnpack);
+    status.fallback_reason = fallback_reason;
+}
 
 pub fn set_resource_dir(path: PathBuf) {
     let _ = RESOURCE_DIR.set(path);
@@ -60,27 +99,44 @@ impl Provider {
 
 pub fn selected() -> Result<Provider> {
     if let Ok(value) = std::env::var("LUMIN_EXECUTION_PROVIDER") {
+        if value == "auto" {
+            return Ok(default_provider());
+        }
         return Provider::parse(&value);
     }
+    Ok(default_provider())
+}
+
+fn default_provider() -> Provider {
     // An accelerator build feature is an explicit deployment preference.
     if cfg!(feature = "tensorrt") {
-        Ok(Provider::TensorRt)
+        Provider::TensorRt
     } else if cfg!(feature = "cuda") {
-        Ok(Provider::Cuda)
+        Provider::Cuda
     } else if cfg!(feature = "directml") {
-        Ok(Provider::DirectMl)
+        Provider::DirectMl
     } else if cfg!(feature = "coreml") {
-        Ok(Provider::CoreMl)
+        Provider::CoreMl
     } else if cfg!(feature = "nnapi") {
-        Ok(Provider::Nnapi)
+        Provider::Nnapi
     } else if cfg!(feature = "xnnpack") {
-        Ok(Provider::Xnnpack)
+        Provider::Xnnpack
     } else if cfg!(target_os = "ios") {
         // WebGPU EP は別の dylib を実行時に登録する必要があり、iOS では同梱できない。
         // 静的リンクした ONNX Runtime に入っている CoreML が唯一の GPU 経路。
-        Ok(Provider::CoreMl)
+        Provider::CoreMl
     } else {
-        Ok(Provider::WebGpu)
+        Provider::WebGpu
+    }
+}
+
+/// Candidates for an unpinned desktop session. WSL/NVIDIA benefits from CUDA
+/// first; WebGPU keeps other Linux GPU vendors on the portable Vulkan path.
+pub fn automatic_candidates() -> Vec<Provider> {
+    if cfg!(target_os = "linux") {
+        vec![Provider::Cuda, Provider::WebGpu, Provider::Cpu]
+    } else {
+        vec![default_provider()]
     }
 }
 
@@ -95,6 +151,23 @@ pub fn selected_for_variant(variant: &super::catalog::Variant) -> Result<Provide
         return Ok(Provider::Cpu);
     }
     selected()
+}
+
+/// Preserve explicit overrides and the iOS Gemma 4 CPU rule while allowing
+/// Linux builds to test CUDA and WebGPU before falling back to the CPU.
+pub fn candidates_for_variant(variant: &super::catalog::Variant) -> Result<Vec<Provider>> {
+    if cfg!(target_os = "ios")
+        && variant.chat_format == super::tokenizer::ChatFormat::Gemma4Turn
+        && std::env::var_os("LUMIN_EXECUTION_PROVIDER").is_none()
+    {
+        return Ok(vec![Provider::Cpu]);
+    }
+    if let Ok(value) = std::env::var("LUMIN_EXECUTION_PROVIDER") {
+        if value != "auto" {
+            return Ok(vec![Provider::parse(&value)?]);
+        }
+    }
+    Ok(automatic_candidates())
 }
 
 pub fn library_path(plugin: bool) -> Result<PathBuf> {
@@ -184,5 +257,36 @@ mod tests {
         assert!(Provider::parse("cdua").is_err());
         assert_eq!(Provider::parse("cpu").unwrap(), Provider::Cpu);
         assert_eq!(Provider::parse("webgpu").unwrap(), Provider::WebGpu);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn linux_auto_prefers_cuda_then_webgpu_then_cpu() {
+        assert_eq!(
+            automatic_candidates(),
+            vec![Provider::Cuda, Provider::WebGpu, Provider::Cpu]
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[ignore = "requires a Linux Vulkan driver and the bundled WebGPU EP"]
+    fn linux_webgpu_device_is_available() {
+        let env = register_webgpu().expect("WebGPU EP registration");
+        assert!(env.devices().any(|device| {
+            device.ep().ok() == Some("WebGpuExecutionProvider")
+                && device.hardware_device().ty() == ort::memory::DeviceType::GPU
+        }));
+    }
+
+    #[cfg(not(target_os = "ios"))]
+    #[test]
+    #[ignore = "requires the bundled CUDA EP and host CUDA runtime libraries"]
+    fn cuda_ep_can_be_registered() {
+        initialize().expect("ONNX Runtime initialization");
+        let builder = ort::session::Session::builder().expect("session builder");
+        builder
+            .with_execution_providers([ort::ep::CUDA::default().build().error_on_failure()])
+            .expect("CUDA EP registration");
     }
 }

@@ -251,14 +251,28 @@ cargo test --manifest-path src-tauri/Cargo.toml \
 
 採取した実応答は `src/components/__tests__/realReplies.ts` に置き、`MarkdownRealReplies.test.tsx` が実際の Markdown 描画結果（入れ子箇条書きや、モデルごとに異なる箇条書き記号の幅を含む）を検証します。
 
-デスクトップの標準構成は単一の ONNX Runtime とネイティブ WebGPU EP です。Dawn が macOS では Metal、Windows では Direct3D 12、Linux では Vulkan を利用します。ブラウザや別モデル形式・別推論バックエンドは不要です。GPU登録失敗時はエラーとし、CPU実行へ自動切替しません。形状計算など未対応の補助演算は ORT の CPU ノードで実行されます。
+デスクトップの標準構成は単一の ONNX Runtime とネイティブ WebGPU EP です。Dawn が macOS では Metal、Windows では Direct3D 12、Linux では Vulkan を利用します。Linux x86_64 では CUDA EP も同梱し、未指定時は CUDA、WebGPU、CPU の順にセッションを作成します。選択結果と GPU で初期化できなかった理由は設定画面に表示します。形状計算など未対応の補助演算は ORT の CPU ノードで実行されます。
 
 ```bash
 bun run prepare:runtime  # 初回に公式バイナリを取得・SHA-256検証（Python 3 はビルド時のみ必要）
 bun run tauri dev       # prepare:runtime は dev/build の前にも自動実行
 ```
 
-同梱版は ONNX Runtime 1.30.0 / WebGPU EP 0.3.0。対象は macOS 14+ ARM64、Linux x86_64 (glibc 2.28+)、Windows x86_64 / ARM64。各環境で対応GPU・ドライバが必要です。Apple Siliconで実推論確認済み、Windows/Linuxは実機未検証です。署名配布では同梱ネイティブライブラリも署名対象になります。
+同梱版は ONNX Runtime 1.30.0 / WebGPU EP 0.3.0。対象は macOS 14+ ARM64、Linux x86_64 (glibc 2.28+)、Windows x86_64 / ARM64。WSL2 で CUDA を使う場合は、Windows 側 NVIDIA ドライバに加え CUDA 13 と cuDNN 9 の Linux ランタイム（`onnxruntime-gpu[cuda,cudnn]` と同じ組合せ）が必要です。Apple Siliconで実推論確認済み、Windows/Linuxは実機未検証です。署名配布では同梱ネイティブライブラリも署名対象になります。
+
+Ubuntu 24.04 系 WSL2 では NVIDIA CUDA リポジトリを有効にしたうえで、次を一度実行します。
+
+```bash
+sudo apt-get install cuda-cudart-13-0 libcublas-13-0 libcudnn9-cuda-13
+```
+
+`LUMIN_EXECUTION_PROVIDER=cuda` は CUDA のみを使う診断用指定です。通常は未指定のまま起動し、設定画面で実際に初期化できたプロバイダとフォールバック理由を確認してください。
+
+Linux/WSL2 の WebGPU (Vulkan) と CUDA の診断は次で採取できます。GPU、Vulkan ICD、同梱 ORT ライブラリと不足している CUDA 依存ライブラリだけを出力します。
+
+```bash
+bun run diagnose:gpu
+```
 
 必要に応じ `LUMIN_EXECUTION_PROVIDER=cuda|tensorrt|directml|coreml|nnapi|xnnpack|cpu` と対応 Cargo feature を明示できます。CUDA 等では対応版 ORT を `ORT_DYLIB_PATH` で指定してください。同梱の標準版は WebGPU 用です。`LUMIN_WEBGPU_LIBRARY` はプラグインの差し替え、`LUMIN_ORT_PROFILE_DIR` は演算配置検証用です。
 

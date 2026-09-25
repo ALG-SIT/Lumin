@@ -20,6 +20,12 @@ interface SystemInfo {
   tauri_version: string;
   ort_available: boolean;
   model_dir: string;
+  execution_provider?: {
+    requested: string;
+    selected: string;
+    is_gpu: boolean;
+    fallback_reason: string | null;
+  };
 }
 
 function modelDirectoryLabel(system: SystemInfo) {
@@ -88,6 +94,22 @@ export function Settings({ onClose }: SettingsProps) {
             <dd>
               {system.ort_available ? "ONNX Runtime 利用可能" : "利用不可"}
             </dd>
+            {system.execution_provider && <>
+              <dt>実行プロバイダ</dt>
+              <dd>
+                {system.execution_provider.selected}
+                {!system.execution_provider.is_gpu &&
+                  system.execution_provider.selected !== "未初期化" && "（CPU）"}
+              </dd>
+            </>}
+            {system.execution_provider?.fallback_reason && (
+              <>
+                <dt>GPU フォールバック理由</dt>
+                <dd title={system.execution_provider.fallback_reason}>
+                  {system.execution_provider.fallback_reason}
+                </dd>
+              </>
+            )}
           </dl>
         </div>
       )}

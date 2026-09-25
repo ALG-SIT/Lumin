@@ -252,17 +252,7 @@ async fn load_variant_session(
         "モデル本体をメモリに読み込み中…",
         0.0,
     ));
-    let provider = super::runtime::selected_for_variant(variant)?;
-    let decoder_path = model_path.clone();
-    let session = blocking_with(move || {
-        super::session::create_session_with_provider(&decoder_path, provider)
-    })
-    .await?;
-
-    // Gemma 3n / Gemma 4 decoders take inputs_embeds, so their embed graph
-    // is part of the install set; a missing one is a broken install, not a
-    // reason to fall back to mock output.
-    let embed_session = match variant.architecture {
+    let embed_path = match variant.architecture {
         Architecture::EmbedChained => {
             let path = variant
                 .embed_path(&state.model_dir)
@@ -276,13 +266,43 @@ async fn load_variant_session(
                 "埋め込みグラフをメモリに読み込み中…",
                 decoder_share,
             ));
-            Some(
-                blocking_with(move || super::session::create_session_with_provider(&path, provider))
-                    .await?,
-            )
+            Some(path)
         }
         Architecture::DecoderOnly => None,
     };
+
+    // An EP must load both Gemma graphs. A decoder-only success followed by an
+    // embed failure would otherwise look like GPU inference while generation
+    // still cannot start.
+    let mut failures = Vec::new();
+    let mut loaded = None;
+    for provider in super::runtime::candidates_for_variant(variant)? {
+        let decoder_path = model_path.clone();
+        let embed_path = embed_path.clone();
+        match blocking_with(move || {
+            let decoder = super::session::create_session_with_provider(&decoder_path, provider)?;
+            let embed = embed_path
+                .as_ref()
+                .map(|path| super::session::create_session_with_provider(path, provider))
+                .transpose()?;
+            Ok((decoder, embed))
+        })
+        .await
+        {
+            Ok((session, embed_session)) => {
+                super::runtime::record_provider(
+                    provider,
+                    (!failures.is_empty()).then(|| failures.join(" / ")),
+                );
+                loaded = Some((session, embed_session));
+                break;
+            }
+            Err(error) => failures.push(format!("{}: {error}", provider.label())),
+        }
+    }
+    let (session, embed_session) = loaded.ok_or_else(|| {
+        anyhow::anyhow!("ONNX Runtime セッションを作成できません: {}", failures.join(" / "))
+    })?;
 
     Ok(InferenceSession {
         session,
