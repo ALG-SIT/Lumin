@@ -151,7 +151,9 @@ pub async fn generate_conversation(
     max_tokens: Option<usize>,
     emit: Option<EventSink<'_>>,
 ) -> Result<GenerateResult> {
-    let max_tokens = max_tokens.unwrap_or(MAX_TOKENS_CEILING).min(MAX_TOKENS_CEILING);
+    let max_tokens = max_tokens
+        .unwrap_or(MAX_TOKENS_CEILING)
+        .min(MAX_TOKENS_CEILING);
     let variant = state.active_variant().await;
 
     if !state.active_model_ready().await {
@@ -213,13 +215,8 @@ async fn ensure_session_loaded(
         }
         Err(e) => {
             state.emit_load_progress(
-                &ModelLoadProgress::new(
-                    variant,
-                    "error",
-                    "モデルの読み込みに失敗しました",
-                    0.0,
-                )
-                .with_error(e.to_string()),
+                &ModelLoadProgress::new(variant, "error", "モデルの読み込みに失敗しました", 0.0)
+                    .with_error(e.to_string()),
             );
             Err(e)
         }
@@ -301,7 +298,10 @@ async fn load_variant_session(
         }
     }
     let (session, embed_session) = loaded.ok_or_else(|| {
-        anyhow::anyhow!("ONNX Runtime セッションを作成できません: {}", failures.join(" / "))
+        anyhow::anyhow!(
+            "ONNX Runtime セッションを作成できません: {}",
+            failures.join(" / ")
+        )
     })?;
 
     Ok(InferenceSession {
@@ -330,7 +330,6 @@ async fn blocking_with<T: Send + 'static>(
         .await
         .map_err(|e| anyhow::anyhow!("model load task failed: {e}"))?
 }
-
 
 fn mock_generate(prompt: &str, max_tokens: usize, model_name: &str) -> GenerateResult {
     let start = Instant::now();
@@ -914,7 +913,10 @@ mod tests {
                 .expect("first turn");
             let answer = answer.text.trim().to_string();
             println!("[{variant} turn1] {answer}");
-            assert!(answer.contains('7'), "[{variant}] turn 1 went wrong: {answer}");
+            assert!(
+                answer.contains('7'),
+                "[{variant}] turn 1 went wrong: {answer}"
+            );
 
             let follow_up =
                 ChatTurn::user("その答えに5を足すといくつですか。数字だけ答えてください。");
@@ -1049,9 +1051,14 @@ mod tests {
             );
             // The reported total is the real prompt length, and progress runs
             // from nothing to all of it without going backwards.
-            assert!(prefill.iter().all(|(_, total)| *total == result.prompt_tokens));
+            assert!(prefill
+                .iter()
+                .all(|(_, total)| *total == result.prompt_tokens));
             assert_eq!(prefill.first().unwrap().0, 0);
-            assert_eq!(prefill.last().unwrap(), &(result.prompt_tokens, result.prompt_tokens));
+            assert_eq!(
+                prefill.last().unwrap(),
+                &(result.prompt_tokens, result.prompt_tokens)
+            );
             assert!(
                 prefill.windows(2).all(|w| w[0].0 <= w[1].0),
                 "[{variant}] prefill progress went backwards: {prefill:?}"
@@ -1109,13 +1116,19 @@ mod tests {
             .expect("streaming conversation");
 
             let streamed = chunks.lock().unwrap().concat();
-            println!("[{variant} streamed in {} chunks] {streamed}", chunks.lock().unwrap().len());
+            println!(
+                "[{variant} streamed in {} chunks] {streamed}",
+                chunks.lock().unwrap().len()
+            );
             assert!(!streamed.is_empty(), "[{variant}] nothing was streamed");
             assert_eq!(
                 streamed, result.text,
                 "[{variant}] streamed text and returned text disagree"
             );
-            assert!(chunks.lock().unwrap().len() > 1, "[{variant}] arrived in one piece");
+            assert!(
+                chunks.lock().unwrap().len() > 1,
+                "[{variant}] arrived in one piece"
+            );
         }
     }
 

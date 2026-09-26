@@ -1,6 +1,9 @@
 //! One ONNX Runtime, with platform execution providers. No model-specific runtime.
 use anyhow::{anyhow, bail, Result};
-use std::{path::PathBuf, sync::{Mutex, OnceLock}};
+use std::{
+    path::PathBuf,
+    sync::{Mutex, OnceLock},
+};
 
 static RESOURCE_DIR: OnceLock<PathBuf> = OnceLock::new();
 static INITIALIZED: OnceLock<std::result::Result<(), String>> = OnceLock::new();
