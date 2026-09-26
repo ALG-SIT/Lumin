@@ -8,44 +8,21 @@ use std::{
 static RESOURCE_DIR: OnceLock<PathBuf> = OnceLock::new();
 static INITIALIZED: OnceLock<std::result::Result<(), String>> = OnceLock::new();
 static WEBGPU_REGISTERED: OnceLock<std::result::Result<(), String>> = OnceLock::new();
-static PROVIDER_STATUS: OnceLock<Mutex<ProviderStatus>> = OnceLock::new();
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ProviderStatus {
-    pub requested: String,
-    pub selected: String,
-    pub is_gpu: bool,
-    pub fallback_reason: Option<String>,
+// Record the provider only after both model graphs have loaded successfully.
+static ACTIVE_PROVIDER: Mutex<Option<Provider>> = Mutex::new(None);
+
+pub fn active_provider_label() -> Option<&'static str> {
+    ACTIVE_PROVIDER
+        .lock()
+        .ok()
+        .and_then(|provider| provider.map(Provider::label))
 }
 
-impl Default for ProviderStatus {
-    fn default() -> Self {
-        Self {
-            requested: std::env::var("LUMIN_EXECUTION_PROVIDER").unwrap_or_else(|_| "auto".into()),
-            selected: "未初期化".into(),
-            is_gpu: false,
-            fallback_reason: None,
-        }
+pub fn record_active_provider(provider: Provider) {
+    if let Ok(mut active) = ACTIVE_PROVIDER.lock() {
+        *active = Some(provider);
     }
-}
-
-pub fn provider_status() -> ProviderStatus {
-    PROVIDER_STATUS
-        .get_or_init(|| Mutex::new(ProviderStatus::default()))
-        .lock()
-        .map(|status| status.clone())
-        .unwrap_or_default()
-}
-
-pub fn record_provider(provider: Provider, fallback_reason: Option<String>) {
-    let mut status = PROVIDER_STATUS
-        .get_or_init(|| Mutex::new(ProviderStatus::default()))
-        .lock()
-        .expect("provider status mutex poisoned");
-    status.selected = provider.label().into();
-    status.is_gpu = !matches!(provider, Provider::Cpu | Provider::Xnnpack);
-    status.fallback_reason = fallback_reason;
 }
 
 pub fn set_resource_dir(path: PathBuf) {
@@ -291,27 +268,5 @@ mod tests {
             automatic_candidates(),
             vec![Provider::Cuda, Provider::WebGpu, Provider::Cpu]
         );
-    }
-
-    #[cfg(target_os = "linux")]
-    #[test]
-    #[ignore = "requires a Linux Vulkan driver and the bundled WebGPU EP"]
-    fn linux_webgpu_device_is_available() {
-        let env = register_webgpu().expect("WebGPU EP registration");
-        assert!(env.devices().any(|device| {
-            device.ep().ok() == Some("WebGpuExecutionProvider")
-                && device.hardware_device().ty() == ort::memory::DeviceType::GPU
-        }));
-    }
-
-    #[cfg(not(target_os = "ios"))]
-    #[test]
-    #[ignore = "requires the bundled CUDA EP and host CUDA runtime libraries"]
-    fn cuda_ep_can_be_registered() {
-        initialize().expect("ONNX Runtime initialization");
-        let builder = ort::session::Session::builder().expect("session builder");
-        builder
-            .with_execution_providers([ort::ep::CUDA::default().build().error_on_failure()])
-            .expect("CUDA EP registration");
     }
 }

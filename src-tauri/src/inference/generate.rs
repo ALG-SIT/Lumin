@@ -287,10 +287,7 @@ async fn load_variant_session(
         .await
         {
             Ok((session, embed_session)) => {
-                super::runtime::record_provider(
-                    provider,
-                    (!failures.is_empty()).then(|| failures.join(" / ")),
-                );
+                super::runtime::record_active_provider(provider);
                 loaded = Some((session, embed_session));
                 break;
             }

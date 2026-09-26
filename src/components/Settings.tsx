@@ -1,7 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { useEffect, useState } from "react";
 import { iconButton } from "./App.css.ts";
 import { ModelManager } from "./ModelManager";
+import type { ModelLoadProgress } from "./modelTypes";
 import { CloseIcon } from "./NavigationIcons";
 import {
   settings,
@@ -20,12 +22,7 @@ interface SystemInfo {
   tauri_version: string;
   ort_available: boolean;
   model_dir: string;
-  execution_provider?: {
-    requested: string;
-    selected: string;
-    isGpu: boolean;
-    fallbackReason: string | null;
-  };
+  execution_provider: string | null;
 }
 
 function modelDirectoryLabel(system: SystemInfo) {
@@ -47,9 +44,33 @@ export function Settings({ onClose }: SettingsProps) {
   const [system, setSystem] = useState<SystemInfo | null>(null);
 
   useEffect(() => {
-    invoke<SystemInfo>("get_system_info")
-      .then(setSystem)
-      .catch(() => setSystem(null));
+    let cancelled = false;
+    let stop: (() => void) | undefined;
+    const refresh = async () => {
+      try {
+        const info = await invoke<SystemInfo>("get_system_info");
+        if (!cancelled) setSystem(info);
+      } catch {
+        // Keep the last known status if a refresh fails.
+      }
+    };
+
+    listen<ModelLoadProgress>("model-load-progress", ({ payload }) => {
+      if (!cancelled && payload.stage === "ready") void refresh();
+    })
+      .then((unlisten) => {
+        if (cancelled) unlisten();
+        else stop = unlisten;
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) void refresh();
+      });
+
+    return () => {
+      cancelled = true;
+      stop?.();
+    };
   }, []);
 
   return (
@@ -94,25 +115,8 @@ export function Settings({ onClose }: SettingsProps) {
             <dd>
               {system.ort_available ? "ONNX Runtime 利用可能" : "利用不可"}
             </dd>
-            {system.execution_provider && (
-              <>
-                <dt>実行プロバイダ</dt>
-                <dd>
-                  {system.execution_provider.selected}
-                  {!system.execution_provider.isGpu &&
-                    system.execution_provider.selected !== "未初期化" &&
-                    "（CPU）"}
-                </dd>
-              </>
-            )}
-            {system.execution_provider?.fallbackReason && (
-              <>
-                <dt>GPU フォールバック理由</dt>
-                <dd title={system.execution_provider.fallbackReason}>
-                  {system.execution_provider.fallbackReason}
-                </dd>
-              </>
-            )}
+            <dt>実行プロバイダ</dt>
+            <dd>{system.execution_provider ?? "推論開始後に表示"}</dd>
           </dl>
         </div>
       )}
