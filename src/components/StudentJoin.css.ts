@@ -67,6 +67,8 @@ export const joinTitle = style({
 // re-encoded at (0,2,0) because the original tied with the scale and won by
 // source order).
 export const joinReset = style({
+  minHeight: "44px",
+  marginBottom: "8px",
   padding: "0.5em 1em",
   fontSize: "0.875rem",
   color: "var(--lumin-purple)",

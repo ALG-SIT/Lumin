@@ -44,17 +44,33 @@ futures = "0.3"
 tower = { version = "0.5", features = ["util"] }
 
 [features]
+# Cargo のフィーチャはターゲット別に切り替えられない。ORT の読み込み方は
+# プラットフォームごとに違う（デスクトップ/Android は実行時読み込み、iOS は静的リンク）ため、
+# フィーチャではなく下の [target.*.dependencies] で決めている。default を空にしてあるのは、
+# tauri CLI が `--no-default-features --features <default>` の形でそのまま転送するので、
+# ここに load-dynamic を置くと iOS ビルドでも ort/load-dynamic が有効になってしまうから。
 default = []
 cuda = ["ort/cuda"]
-tensorrt = ["ort/tensorrt"]
+tensorrt = ["ort/tensorrt", "ort/cuda"]
 coreml = ["ort/coreml"]
 directml = ["ort/directml"]
 nnapi = ["ort/nnapi"]
 xnnpack = ["ort/xnnpack"]
+# デスクトップ/Android では下のターゲット指定で常に有効。明示指定用に残してある。
 load-dynamic = ["ort/load-dynamic"]
+
+# iOS 以外は同梱した ONNX Runtime を実行時に読み込む（runtime/ 以下、prepare:runtime が配置）。
+[target.'cfg(not(target_os = "ios"))'.dependencies]
+ort = { version = "2.0.0-rc.13", features = ["load-dynamic"] }
 
 [target.'cfg(all(target_os = "macos", target_arch = "aarch64"))'.dependencies]
 ort = { version = "2.0.0-rc.13", features = ["half", "coreml"] }
+
+# iOS は dylib を読み込めないので、ビルド済みの静的 ONNX Runtime をリンクする。
+# ort-sys の Apple 向けビルドには CoreML EP が入っており、apple-ios では
+# CoreML.framework も自動でリンクされる。
+[target.'cfg(all(target_os = "ios", target_arch = "aarch64"))'.dependencies]
+ort = { version = "2.0.0-rc.13", features = ["half", "coreml", "download-binaries"] }
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

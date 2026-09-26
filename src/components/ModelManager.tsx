@@ -38,6 +38,17 @@ interface ModelEntry {
   active?: boolean;
 }
 
+/** Payload of the backend's `model-load-progress` event. */
+interface ModelLoadProgress {
+  variant: string;
+  modelName: string;
+  stage: "tokenizer" | "decoder" | "embed" | "ready" | "error";
+  label: string;
+  percent: number;
+  done: boolean;
+  error?: string;
+}
+
 interface DownloadProgress {
   file: string;
   downloaded: number;
@@ -58,6 +69,9 @@ export function ModelManager() {
   const [error, setError] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [switching, setSwitching] = useState(false);
+  const [loadProgress, setLoadProgress] = useState<ModelLoadProgress | null>(
+    null,
+  );
 
   const loadModels = useCallback(async () => {
     try {
@@ -76,6 +90,7 @@ export function ModelManager() {
   useEffect(() => {
     let unlistenProgress: (() => void) | undefined;
     let unlistenComplete: (() => void) | undefined;
+    let unlistenLoad: (() => void) | undefined;
 
     const setupListeners = async () => {
       unlistenProgress = await listen<DownloadProgress>(
@@ -85,6 +100,15 @@ export function ModelManager() {
             const next = { ...prev, [event.payload.file]: event.payload };
             return next;
           });
+        },
+      );
+
+      unlistenLoad = await listen<ModelLoadProgress>(
+        "model-load-progress",
+        (event) => {
+          setLoadProgress(
+            event.payload.stage === "ready" ? null : event.payload,
+          );
         },
       );
 
@@ -100,6 +124,7 @@ export function ModelManager() {
     return () => {
       if (unlistenProgress) unlistenProgress();
       if (unlistenComplete) unlistenComplete();
+      if (unlistenLoad) unlistenLoad();
     };
   }, [loadModels]);
 
@@ -143,10 +168,16 @@ export function ModelManager() {
     try {
       await invoke("set_active_model", { variant });
       await loadModels();
+      // Reading the graphs into memory takes tens of seconds even from a local
+      // file. Doing it here, where the teacher just chose the model, means the
+      // wait is visible and over before the first question rather than turning
+      // up as an unexplained pause mid-lesson.
+      await invoke("preload_active_model");
     } catch (err) {
       setError(`モデルの切り替えに失敗しました: ${err}`);
     } finally {
       setSwitching(false);
+      setLoadProgress(null);
     }
   };
 
@@ -245,6 +276,27 @@ export function ModelManager() {
                       ダウンロード
                     </button>
                   )}
+
+                {loadProgress?.variant === model.variant && (
+                  <>
+                    <div
+                      className={progressBar}
+                      role="progressbar"
+                      aria-valuenow={Math.round(loadProgress.percent)}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-label={`${model.name} の読み込み`}
+                    >
+                      <div
+                        className={progressFill}
+                        style={{
+                          width: `${Math.max(loadProgress.percent, 4)}%`,
+                        }}
+                      />
+                    </div>
+                    <span>{loadProgress.label}</span>
+                  </>
+                )}
 
                 {downloadingVariant === model.variant && (
                   <>

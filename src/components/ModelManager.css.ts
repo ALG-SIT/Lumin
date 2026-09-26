@@ -27,7 +27,15 @@ globalStyle(`${modelManager} h2`, {
 // index.css L265-275.
 export const modelCard = style({
   display: "grid",
-  gridTemplateColumns: "1fr auto auto",
+  gridTemplateColumns: "minmax(0, 1fr) auto auto",
+  minWidth: 0,
+  "@media": {
+    "(max-width: 640px)": {
+      gridTemplateColumns: "minmax(0, 1fr) auto",
+      gap: "12px",
+      padding: "12px",
+    },
+  },
   alignItems: "center",
   gap: "var(--space-4)",
   padding: "var(--space-5)",
@@ -40,6 +48,9 @@ export const modelCard = style({
 // index.css L277-280 (`.model-card .model-name`). Compound selector
 // preserves the original (0,2,0) specificity.
 export const modelName = style({
+  minWidth: 0,
+  overflowWrap: "anywhere",
+  "@media": { "(max-width: 640px)": { gridColumn: "1 / -1" } },
   selectors: {
     [`${modelCard} &`]: {
       fontWeight: "600",
@@ -51,6 +62,11 @@ export const modelName = style({
 // index.css L282-289 (`.model-card .model-meta`). Compound selector
 // preserves the original (0,2,0) specificity.
 export const modelMeta = style({
+  "@media": {
+    "(max-width: 640px)": {
+      selectors: { [`${modelCard} &`]: { alignItems: "flex-start" } },
+    },
+  },
   selectors: {
     [`${modelCard} &`]: {
       display: "flex",
@@ -86,6 +102,9 @@ export const statusBadge = style({
 
 // index.css L310-314.
 export const modelActions = style({
+  minWidth: 0,
+  flexWrap: "wrap",
+  justifyContent: "flex-end",
   display: "flex",
   alignItems: "center",
   gap: "var(--space-3)",
@@ -101,6 +120,7 @@ globalStyle(`${modelActions} button`, {
   color: "white",
   border: "none",
   padding: "8px 14px",
+  minHeight: "44px",
   borderRadius: "var(--radius-md)",
   cursor: "pointer",
   fontWeight: "600",
@@ -137,6 +157,7 @@ globalStyle(`${importSection} button`, {
   color: "white",
   border: "none",
   padding: "10px 18px",
+  minHeight: "44px",
   borderRadius: "var(--radius-md)",
   cursor: "pointer",
   fontWeight: "600",

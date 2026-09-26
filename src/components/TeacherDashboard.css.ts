@@ -10,18 +10,20 @@ import { style } from "@vanilla-extract/css";
 // (@media max-width: 480px). 768 is emitted before 480 to preserve cascade.
 export const teacherLayout = style({
   display: "grid",
-  gridTemplateColumns: "200px 1fr",
+  gridTemplateColumns: "200px minmax(0, 1fr)",
   gap: "16px",
-  minHeight: "calc(100vh - 73px)",
+  height: "100%",
+  minHeight: 0,
   "@media": {
     "(max-width: 768px)": {
       gridTemplateColumns: "1fr",
-      gridTemplateRows: "auto 1fr",
-      minHeight: "calc(100vh - 73px)",
+      gridTemplateRows: "auto minmax(0, 1fr)",
+      height: "100%",
+      minHeight: 0,
     },
     "(max-width: 480px)": {
-      gridTemplateRows: "auto 1fr",
-      gap: "12px",
+      gridTemplateRows: "auto minmax(0, 1fr)",
+      gap: "8px",
     },
   },
 });
@@ -50,6 +52,7 @@ export const teacherSidebar = style({
 // this class instead (including the previously unclassed reset button), which
 // applies the identical declarations to exactly the same elements.
 export const sidebarButton = style({
+  minHeight: "44px",
   textAlign: "left",
   padding: "12px 14px",
   borderRadius: "8px",
@@ -87,6 +90,9 @@ export const sidebarButtonActive = style({
 
 // index.css L123-127.
 export const teacherContent = style({
+  display: "flex",
+  flexDirection: "column",
+  minHeight: 0,
   flex: 1,
   minWidth: 0,
   overflowY: "auto",
@@ -166,7 +172,7 @@ export const teacherDashboardSubtitle = style({
 export const metricGrid = style({
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
-  gap: "12px",
+  gap: "8px",
   marginBottom: "24px",
   "@media": {
     "(max-width: 768px)": {
@@ -258,12 +264,14 @@ export const dashboardEmpty = style({
 export const barRow = style({
   display: "flex",
   alignItems: "center",
-  gap: "12px",
+  gap: "8px",
   marginBottom: "8px",
 });
 
 // index.css L943-948.
 export const barMeta = style({
+  minWidth: 0,
+  "@media": { "(max-width: 640px)": { width: "40%" } },
   width: "180px",
   display: "flex",
   flexDirection: "column",

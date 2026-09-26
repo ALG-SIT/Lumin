@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "identifier": "jp.lumin.learning.app",
   "build": {
-    "beforeDevCommand": "bun run dev",
+    "beforeDevCommand": "bun run prepare:runtime && bun run dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "bun run build",
+    "beforeBuildCommand": "bun run prepare:runtime && bun run build",
     "frontendDist": "../dist"
   },
   "app": {
@@ -25,17 +25,19 @@
     "active": true,
     "targets": "all",
     "iOS": {
-      "minimumSystemVersion": "15.1",
+      "minimumSystemVersion": "26.0",
       "developmentTeam": ""
     },
-    "android": {
-    },
+    "android": {},
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "macOS": {
+      "minimumSystemVersion": "14.0"
+    }
   }
 }

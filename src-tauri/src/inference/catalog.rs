@@ -63,11 +63,15 @@ pub struct Variant {
     /// Physical RAM in GB below which the variant is not recommended.
     ///
     /// This is device RAM, not the model's footprint: it is the working set
-    /// plus room for the OS and the app. The INT4 E-series working sets are
-    /// small - Google's own figures put Gemma 4 E2B at ~4 GB and E4B at
-    /// ~5.5-6 GB at 4-bit, and an E4B generation measured here peaked at
-    /// 4.4 GB RSS - because Per-Layer Embeddings are looked up rather than
-    /// held resident as active parameters.
+    /// plus room for the OS and the app.
+    ///
+    /// Google publishes weights-only 4-bit inference figures of 2.9 GB for
+    /// Gemma 4 E2B and 4.5 GB for E4B, but these ONNX exports need more. The
+    /// Per-Layer Embedding tables are exported as a separate `embed_tokens`
+    /// graph, so both graphs are resident at once and the on-disk weights are
+    /// the floor rather than the effective parameter count. Peak memory
+    /// measured here (Apple M5, ONNX Runtime WebGPU, 64 tokens) was 3.7 GB
+    /// for E2B and 5.6 GB for E4B.
     pub min_memory_gb: u64,
 }
 
@@ -102,6 +106,38 @@ impl Variant {
     pub fn is_installed(&self, model_root: &Path) -> bool {
         let dir = self.dir(model_root);
         self.files.iter().all(|f| dir.join(f.dest_name).exists())
+    }
+
+    /// On-disk bytes of the graphs that have to be loaded into memory, as
+    /// `(decoder, embed_tokens)`.
+    ///
+    /// The embed graph owns the files named after it; everything else that is
+    /// not the tokenizer belongs to the decoder. Matching the decoder by its
+    /// own name would not work: the Gemma 3 1B export keeps the upstream
+    /// `model_q4.onnx_data` name for its external data, while the Gemma 3n/4
+    /// exports name each shard after its own graph.
+    pub fn graph_bytes(&self, model_root: &Path) -> (u64, u64) {
+        let dir = self.dir(model_root);
+        let embed_stem = self
+            .embed_file
+            .map(|f| f.strip_suffix(".onnx").unwrap_or(f))
+            .unwrap_or("\0");
+        let mut decoder = 0;
+        let mut embed = 0;
+        for file in self.files {
+            if file.dest_name == self.tokenizer_file {
+                continue;
+            }
+            let size = std::fs::metadata(dir.join(file.dest_name))
+                .map(|m| m.len())
+                .unwrap_or(0);
+            if file.dest_name.starts_with(embed_stem) {
+                embed += size;
+            } else {
+                decoder += size;
+            }
+        }
+        (decoder, embed)
     }
 
     /// Bytes actually on disk for this variant (partial installs included).

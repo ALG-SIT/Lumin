@@ -1,0 +1,8 @@
+# crates.io のキャッシュからコピーしたときに付いてくる痕跡
+.cargo-ok
+Cargo.toml.orig
+
+# tauri がビルド時に生成する Tauri iOS/Android Swift API のコピー。
+# 上流の .gitignore は ios/.tauri/ と android/.tauri/ しか除外していないが、
+# ios/Package.swift は ../.tauri/tauri-api を参照するのでクレート直下にも作られる。
+.tauri/

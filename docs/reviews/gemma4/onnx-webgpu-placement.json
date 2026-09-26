@@ -1,0 +1,226 @@
+{
+  "decoder_model_merged_q4_2026-09-12_16-13-42_845.json": [
+    {
+      "provider": "CPUExecutionProvider",
+      "operator": "Cast",
+      "events": 267
+    },
+    {
+      "provider": "CPUExecutionProvider",
+      "operator": "Concat",
+      "events": 178
+    },
+    {
+      "provider": "CPUExecutionProvider",
+      "operator": "Expand",
+      "events": 89
+    },
+    {
+      "provider": "CPUExecutionProvider",
+      "operator": "Gather",
+      "events": 712
+    },
+    {
+      "provider": "CPUExecutionProvider",
+      "operator": "GreaterOrEqual",
+      "events": 445
+    },
+    {
+      "provider": "CPUExecutionProvider",
+      "operator": "Less",
+      "events": 89
+    },
+    {
+      "provider": "CPUExecutionProvider",
+      "operator": "Neg",
+      "events": 89
+    },
+    {
+      "provider": "CPUExecutionProvider",
+      "operator": "Range",
+      "events": 445
+    },
+    {
+      "provider": "CPUExecutionProvider",
+      "operator": "Shape",
+      "events": 89
+    },
+    {
+      "provider": "CPUExecutionProvider",
+      "operator": "Sub",
+      "events": 178
+    },
+    {
+      "provider": "CPUExecutionProvider",
+      "operator": "Unsqueeze",
+      "events": 534
+    },
+    {
+      "provider": "WebGpuExecutionProvider",
+      "operator": "Add",
+      "events": 11303
+    },
+    {
+      "provider": "WebGpuExecutionProvider",
+      "operator": "Concat",
+      "events": 712
+    },
+    {
+      "provider": "WebGpuExecutionProvider",
+      "operator": "Div",
+      "events": 89
+    },
+    {
+      "provider": "WebGpuExecutionProvider",
+      "operator": "Expand",
+      "events": 979
+    },
+    {
+      "provider": "WebGpuExecutionProvider",
+      "operator": "Gather",
+      "events": 3738
+    },
+    {
+      "provider": "WebGpuExecutionProvider",
+      "operator": "Gelu",
+      "events": 7476
+    },
+    {
+      "provider": "WebGpuExecutionProvider",
+      "operator": "GroupQueryAttention",
+      "events": 1780
+    },
+    {
+      "provider": "WebGpuExecutionProvider",
+      "operator": "MatMul",
+      "events": 3916
+    },
+    {
+      "provider": "WebGpuExecutionProvider",
+      "operator": "MatMulNBits",
+      "events": 26878
+    },
+    {
+      "provider": "WebGpuExecutionProvider",
+      "operator": "MemcpyFromHost",
+      "events": 801
+    },
+    {
+      "provider": "WebGpuExecutionProvider",
+      "operator": "Mul",
+      "events": 11570
+    },
+    {
+      "provider": "WebGpuExecutionProvider",
+      "operator": "Reshape",
+      "events": 21627
+    },
+    {
+      "provider": "WebGpuExecutionProvider",
+      "operator": "RotaryEmbedding",
+      "events": 5874
+    },
+    {
+      "provider": "WebGpuExecutionProvider",
+      "operator": "Shape",
+      "events": 534
+    },
+    {
+      "provider": "WebGpuExecutionProvider",
+      "operator": "SimplifiedLayerNormalization",
+      "events": 26878
+    },
+    {
+      "provider": "WebGpuExecutionProvider",
+      "operator": "Slice",
+      "events": 89
+    },
+    {
+      "provider": "WebGpuExecutionProvider",
+      "operator": "Softmax",
+      "events": 1958
+    },
+    {
+      "provider": "WebGpuExecutionProvider",
+      "operator": "Split",
+      "events": 3738
+    },
+    {
+      "provider": "WebGpuExecutionProvider",
+      "operator": "Sub",
+      "events": 89
+    },
+    {
+      "provider": "WebGpuExecutionProvider",
+      "operator": "Tanh",
+      "events": 89
+    },
+    {
+      "provider": "WebGpuExecutionProvider",
+      "operator": "Transpose",
+      "events": 5073
+    },
+    {
+      "provider": "WebGpuExecutionProvider",
+      "operator": "Unsqueeze",
+      "events": 1513
+    },
+    {
+      "provider": "WebGpuExecutionProvider",
+      "operator": "Where",
+      "events": 3293
+    }
+  ],
+  "embed_tokens_q4_2026-09-12_16-14-03_426.json": [
+    {
+      "provider": "CPUExecutionProvider",
+      "operator": "Equal",
+      "events": 178
+    },
+    {
+      "provider": "CPUExecutionProvider",
+      "operator": "Less",
+      "events": 89
+    },
+    {
+      "provider": "CPUExecutionProvider",
+      "operator": "Where",
+      "events": 89
+    },
+    {
+      "provider": "WebGpuExecutionProvider",
+      "operator": "And",
+      "events": 178
+    },
+    {
+      "provider": "WebGpuExecutionProvider",
+      "operator": "GatherBlockQuantized",
+      "events": 178
+    },
+    {
+      "provider": "WebGpuExecutionProvider",
+      "operator": "MemcpyFromHost",
+      "events": 445
+    },
+    {
+      "provider": "WebGpuExecutionProvider",
+      "operator": "MemcpyToHost",
+      "events": 89
+    },
+    {
+      "provider": "WebGpuExecutionProvider",
+      "operator": "Mul",
+      "events": 178
+    },
+    {
+      "provider": "WebGpuExecutionProvider",
+      "operator": "Not",
+      "events": 178
+    },
+    {
+      "provider": "WebGpuExecutionProvider",
+      "operator": "Reshape",
+      "events": 89
+    }
+  ]
+}

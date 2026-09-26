@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useState } from "react";
 import { isTauriEnvironment } from "../lib/tauri";
-import { resetButton } from "../styles/shared.css.ts";
+import { secondaryButton } from "../styles/shared.css.ts";
 import {
   demoComplete,
   demoError,
@@ -140,7 +140,7 @@ export function DemoFlow({ onReset }: DemoFlowProps) {
           {onReset && (
             <button
               type="button"
-              className={resetButton}
+              className={secondaryButton}
               onClick={onReset}
               style={{ marginTop: "0.75rem" }}
             >
@@ -249,7 +249,7 @@ export function DemoFlow({ onReset }: DemoFlowProps) {
         <div className={demoError} role="alert">
           <p>エラーが発生しました: {error}</p>
           {isTauriEnvironment() && (
-            <button type="button" className={resetButton} onClick={runDemo}>
+            <button type="button" className={secondaryButton} onClick={runDemo}>
               もう一度試す
             </button>
           )}
@@ -262,7 +262,7 @@ export function DemoFlow({ onReset }: DemoFlowProps) {
           {onReset && (
             <button
               type="button"
-              className={resetButton}
+              className={secondaryButton}
               onClick={onReset}
               style={{ marginTop: "1rem" }}
             >

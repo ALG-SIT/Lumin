@@ -12,9 +12,15 @@
     "format": "biome format --write .",
     "preview": "vite preview",
     "tauri": "tauri",
+    "ios:signing": "python3 scripts/setup_ios_signing.py",
+    "ios:icons": "cp src-tauri/icons/ios/*.png src-tauri/gen/apple/Assets.xcassets/AppIcon.appiconset/",
+    "ios:init": "bun run ios:signing && tauri ios init && bun run ios:signing && bun run ios:icons",
+    "ios:dev": "tauri ios dev --host",
+    "ios:build": "tauri ios build --target aarch64",
     "download:model": "bun run scripts/download_model.ts",
     "test": "vitest",
-    "test:run": "vitest run"
+    "test:run": "vitest run",
+    "prepare:runtime": "python3 scripts/prepare_onnx_runtime.py"
   },
   "dependencies": {
     "@fontsource-variable/noto-sans-jp": "5.3.0",
@@ -23,6 +29,7 @@
     "@tauri-apps/plugin-dialog": "^2.7.2",
     "@tauri-apps/plugin-opener": "^2",
     "@vanilla-extract/css": "^1.21.2",
+    "katex": "^0.18.7",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },

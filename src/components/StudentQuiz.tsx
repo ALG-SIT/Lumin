@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { baseInputFocus } from "../styles/global.css.ts";
 import {
   errorMessage,
@@ -141,14 +141,18 @@ export function StudentQuiz({
 }: StudentQuizProps) {
   const quiz = quizProp ?? SAMPLE_QUIZ;
 
+  const eventId = useRef(crypto.randomUUID());
+  const advancing = useRef(false);
   const [questionIndex, setQuestionIndex] = useState(0);
   const [answer, setAnswer] = useState("");
+  const [lastAnswer, setLastAnswer] = useState("");
   const [hintCount, setHintCount] = useState(0);
   const [feedback, setFeedback] = useState<"idle" | "correct" | "incorrect">(
     "idle",
   );
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isComplete, setIsComplete] = useState(false);
+  const [shownHints, setShownHints] = useState<string[]>([]);
   const [generatedHint, setGeneratedHint] = useState<string | null>(null);
   const [initialWasCorrect, setInitialWasCorrect] = useState<boolean | null>(
     null,
@@ -163,25 +167,30 @@ export function StudentQuiz({
   const progressLabel = `${questionIndex + 1} / ${totalQuestions} 問題目`;
 
   const generateHint = useCallback(
-    async (level: number) => {
+    async (level: number, submittedAnswer = lastAnswer) => {
       try {
         const hint = await invoke<string>("generate_hint", {
-          questionId: question.id,
-          concept: question.concept,
+          questionJson: JSON.stringify(question),
+          studentAnswer: submittedAnswer,
+          previousHints: shownHints.slice(-3),
           hintLevel: level,
         });
         setGeneratedHint(hint);
+        setShownHints((previous) => [...previous, hint]);
       } catch (e) {
         console.error("generate_hint failed", e);
         setGeneratedHint(null);
+        const fallback = question.hints[level - 1] ?? question.hints[0];
+        if (fallback) setShownHints((previous) => [...previous, fallback]);
       }
     },
-    [question],
+    [question, lastAnswer, shownHints],
   );
 
   const handleSubmit = async () => {
     if (isAnalyzing || !answer.trim()) return;
     setIsAnalyzing(true);
+    setLastAnswer(answer);
     setError(null);
 
     try {
@@ -204,7 +213,7 @@ export function StudentQuiz({
         const nextHintCount = hintCount === 0 ? 1 : hintCount;
         setHintCount(nextHintCount);
         setGeneratedHint(null);
-        await generateHint(nextHintCount);
+        await generateHint(nextHintCount, answer);
       }
     } catch (e) {
       setError(String(e));
@@ -219,7 +228,12 @@ export function StudentQuiz({
     setHintCount(nextHintCount);
     setFeedback("idle");
     setGeneratedHint(null);
-    await generateHint(nextHintCount);
+    setIsAnalyzing(true);
+    try {
+      await generateHint(nextHintCount);
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
 
   const handleRetry = () => {
@@ -230,9 +244,9 @@ export function StudentQuiz({
   const sendAnalysisEvent = async (retrySuccess: boolean) => {
     const event = {
       // AnalysisEvent(Rust)の必須フィールド: id / submittedAt(秒)
-      id: crypto.randomUUID(),
+      id: eventId.current,
       participantToken: participantToken ?? `student-${sessionId.slice(0, 8)}`,
-      sessionId: null,
+      sessionId: sessionId || null,
       questionID: question.id,
       concept: question.concept,
       misconception: firstMisconception,
@@ -247,19 +261,35 @@ export function StudentQuiz({
         eventJson: JSON.stringify(event),
       });
     } catch (e) {
-      // The backend may not yet expose this command; log only.
-      console.error("send_analysis_event failed", e);
+      throw new Error(
+        `結果を送信できませんでした。接続を確認して、もう一度お試しください。(${String(e)})`,
+      );
     }
   };
 
   const handleAdvance = async () => {
+    if (isAnalyzing || advancing.current) return;
+    advancing.current = true;
+    setIsAnalyzing(true);
+    setError(null);
     const retrySuccess = initialWasCorrect === false;
-    await sendAnalysisEvent(retrySuccess);
+    try {
+      await sendAnalysisEvent(retrySuccess);
+    } catch (e) {
+      setError(String(e));
+      return;
+    } finally {
+      advancing.current = false;
+      setIsAnalyzing(false);
+    }
 
     if (questionIndex === totalQuestions - 1) {
       setIsComplete(true);
     } else {
+      eventId.current = crypto.randomUUID();
       setQuestionIndex((i) => i + 1);
+      setShownHints([]);
+      setLastAnswer("");
       setAnswer("");
       setHintCount(0);
       setFeedback("idle");
@@ -324,7 +354,12 @@ export function StudentQuiz({
           placeholder="答えを入力"
           disabled={isAnalyzing || feedback === "correct"}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && !submitDisabled) {
+            if (
+              e.key === "Enter" &&
+              !e.nativeEvent.isComposing &&
+              e.keyCode !== 229 &&
+              !submitDisabled
+            ) {
               void handleSubmit();
             }
           }}

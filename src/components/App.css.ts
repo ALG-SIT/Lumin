@@ -1,4 +1,4 @@
-import { style } from "@vanilla-extract/css";
+import { globalStyle, style } from "@vanilla-extract/css";
 
 // App.tsx batch (plan checkbox 4). Declaration values are verbatim copies of
 // the corresponding src/index.css rules (base rule + every descendant-combined
@@ -10,113 +10,100 @@ import { style } from "@vanilla-extract/css";
 export const app = style({
   display: "flex",
   flexDirection: "column",
-  minHeight: "100vh",
+  position: "fixed",
+  top: "var(--viewport-top, 0px)",
+  left: 0,
+  width: "100%",
+  height: "var(--viewport-height, 100dvh)",
+  paddingTop: "env(safe-area-inset-top, 0px)",
+  paddingBottom: "env(safe-area-inset-bottom, 0px)",
+  paddingLeft: "env(safe-area-inset-left, 0px)",
+  paddingRight: "env(safe-area-inset-right, 0px)",
+  overflow: "hidden",
+  selectors: { ":root[data-keyboard-open] &": { paddingBottom: 0 } },
 });
 
-// index.css L84-93 + L1587-1590 (@media max-width: 480px).
 export const appBar = style({
+  flexShrink: 0,
   display: "flex",
   alignItems: "center",
   justifyContent: "space-between",
-  gap: "var(--space-3)",
-  padding: "12px 16px",
-  background: "var(--lumin-purple)",
-  color: "white",
-  borderBottom: "1px solid var(--lumin-purple-dark)",
-  "@media": {
-    "(max-width: 480px)": {
-      padding: "10px 12px",
-      flexWrap: "wrap",
-    },
-  },
+  gap: "8px",
+  minHeight: "48px",
+  padding: "2px 12px",
+  color: "var(--lumin-ink)",
+  background: "var(--lumin-bg)",
 });
 
-// index.css L95-102 (`.app-bar .brand`).
-export const brand = style({
-  selectors: {
-    [`${appBar} &`]: {
-      display: "flex",
-      alignItems: "center",
-      gap: "var(--space-2)",
-      fontWeight: "900",
-      letterSpacing: "0.1em",
-      color: "white",
-    },
-  },
+export const workArea = style({
+  height: "100%",
+  minHeight: 0,
+  overflowY: "auto",
+  overscrollBehavior: "contain",
+  selectors: { "&[hidden]": { display: "none" } },
 });
 
-// index.css L104-108 (`.app-bar .brand-icon`).
-export const brandIcon = style({
-  selectors: {
-    [`${appBar} &`]: {
-      width: "24px",
-      height: "24px",
-      color: "white",
-    },
+export const iconButton = style({
+  display: "inline-flex",
+  flexShrink: 0,
+  alignItems: "center",
+  justifyContent: "center",
+  width: "44px",
+  height: "44px",
+  padding: 0,
+  color: "var(--lumin-ink)",
+  background: "var(--lumin-card)",
+  border: "1px solid var(--lumin-border)",
+  borderRadius: "50%",
+  cursor: "pointer",
+  ":focus-visible": {
+    outline: "2px solid var(--lumin-indigo)",
+    outlineOffset: "2px",
   },
 });
-
-// index.css L110-113 (`.app-bar .role-badge`) + L1592-1594 (@media
-// max-width: 480px).
-export const roleBadge = style({
-  selectors: {
-    [`${appBar} &`]: {
-      fontSize: "0.875rem",
-      color: "rgba(255, 255, 255, 0.9)",
-    },
+export const actionTrigger = style([
+  iconButton,
+  { color: "var(--lumin-indigo)" },
+]);
+export const roleHome = style([
+  iconButton,
+  {
+    width: "80px",
+    gap: "6px",
+    borderRadius: "22px",
+    fontSize: "13px",
+    selectors: { "&:not(button)": { visibility: "hidden" } },
   },
-  "@media": {
-    "(max-width: 480px)": {
-      selectors: {
-        [`${appBar} &`]: {
-          fontSize: "0.75rem",
-        },
-      },
-    },
+]);
+export const toolbarTitle = style({
+  flex: 1,
+  minWidth: 0,
+  paddingRight: "36px",
+  textAlign: "center",
+  fontWeight: 600,
+  fontSize: "15px",
+});
+export const actionDialog = style({
+  position: "fixed",
+  inset: 0,
+  margin: "auto",
+  border: "1px solid var(--lumin-border)",
+  borderRadius: "28px",
+  padding: "16px",
+  width: "min(440px, calc(100% - 24px))",
+  maxHeight: "calc(100dvh - 80px)",
+  overflowY: "auto",
+  color: "var(--lumin-ink)",
+  background: "var(--lumin-card)",
+  selectors: {
+    "&[open]": { display: "flex", flexDirection: "column", gap: "16px" },
+    "&::backdrop": { background: "rgba(15, 23, 42, 0.35)" },
   },
 });
-
-// index.css L115-124, L126-128 (:hover), L130-132 (:active), L1656-1657
-// (@media prefers-reduced-motion: reduce portions).
-//
-// Re-homed from the T3 shared `resetButton` primitive instead of wiring it:
-// that primitive anchors on the literal `.app-bar &` selector, which stops
-// matching once className="app-bar" becomes the hashed `${appBar}` class. The
-// ancestor condition is rebuilt here as a real VE cross-reference so the
-// DemoFlow behavior is preserved (it renders .reset-button outside the app
-// bar and is intentionally unstyled). This is the T3c "descendant forms
-// convert to ${parent} refs at parent-batch time" operation.
-export const resetButton = style({
-  selectors: {
-    [`${appBar} &`]: {
-      background: "rgba(255, 255, 255, 0.2)",
-      border: "none",
-      color: "white",
-      padding: "6px 12px",
-      borderRadius: "8px",
-      cursor: "pointer",
-      fontSize: "0.875rem",
-      transition: "background 0.2s ease, transform 0.2s ease",
-    },
-    [`${appBar} &:hover`]: {
-      background: "rgba(255, 255, 255, 0.3)",
-    },
-    [`${appBar} &:active`]: {
-      transform: "scale(0.98)",
-    },
-  },
-  "@media": {
-    "(prefers-reduced-motion: reduce)": {
-      selectors: {
-        [`${appBar} &`]: {
-          transition: "none",
-          transform: "none",
-        },
-        [`${appBar} &:active`]: {
-          transition: "none",
-          transform: "none",
-        },
-      },
-    },
-  },
+export const dialogHeading = style({
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: "12px",
 });
+globalStyle(`${dialogHeading} h2`, { margin: 0, fontSize: "1.125rem" });

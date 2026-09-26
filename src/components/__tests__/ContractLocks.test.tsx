@@ -90,12 +90,50 @@ describe("StudentQuiz IPC contracts (camelCase keys)", () => {
       expect(call).toBeDefined();
       if (!call) throw new Error("generate_hint was not invoked");
       const keys = Object.keys(call[1] as Record<string, unknown>).sort();
-      expect(keys).toEqual(["concept", "hintLevel", "questionId"]);
+      expect(keys).toEqual([
+        "hintLevel",
+        "previousHints",
+        "questionJson",
+        "studentAnswer",
+      ]);
+      expect(JSON.parse(call[1].questionJson)).toEqual(QUIZ.questions[0]);
+      expect(call[1].studentAnswer).toBe("999");
     });
     // 失敗してもバンクのヒントが表示される(モック文は出ない)
     await waitFor(() => {
       expect(screen.getByText(/y = mx \+ b の係数に注目/)).toBeDefined();
     });
     expect(screen.queryByText(/モック出力/)).toBeNull();
+  });
+});
+
+it("次のヒントには実際に表示したAIヒントと直前の解答を渡す", async () => {
+  invokeMock.mockImplementation((cmd: string, args: { hintLevel?: number }) => {
+    if (cmd === "analyze_answer")
+      return Promise.resolve({
+        isCorrect: false,
+        misconception: "傾きの符号の読み落とし",
+      });
+    if (cmd === "generate_hint")
+      return Promise.resolve(
+        args.hintLevel === 1 ? "xが変わるときに注目しよう" : "xの係数を見よう",
+      );
+    return Promise.resolve(null);
+  });
+  render(<StudentQuiz sessionId="sess" quiz={QUIZ} onComplete={() => {}} />);
+  fireEvent.change(screen.getByPlaceholderText("答えを入力"), {
+    target: { value: "2" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "答えを確かめる" }));
+  await screen.findByText("xが変わるときに注目しよう");
+  fireEvent.click(screen.getByRole("button", { name: "次のヒント" }));
+  await screen.findByText("xの係数を見よう");
+  const calls = invokeMock.mock.calls.filter(
+    ([cmd]) => cmd === "generate_hint",
+  );
+  expect(calls[1][1]).toMatchObject({
+    hintLevel: 2,
+    studentAnswer: "2",
+    previousHints: ["xが変わるときに注目しよう"],
   });
 });

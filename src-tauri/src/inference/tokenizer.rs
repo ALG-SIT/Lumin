@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use serde::{Deserialize, Serialize};
 use std::path::Path;
 use tokenizers::Tokenizer;
 
@@ -65,6 +66,53 @@ pub enum ChatFormat {
     Gemma4Turn,
 }
 
+/// Who spoke one turn of a conversation.
+///
+/// Serialized as the names the frontend uses; the on-the-wire spelling of the
+/// assistant role differs from Gemma's (`model`), which [`ChatFormat`] applies.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ChatRole {
+    User,
+    Assistant,
+}
+
+impl ChatRole {
+    /// The role name Gemma's chat template expects.
+    fn marker(&self) -> &'static str {
+        match self {
+            ChatRole::User => "user",
+            ChatRole::Assistant => "model",
+        }
+    }
+}
+
+/// One turn of a conversation.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChatTurn {
+    pub role: ChatRole,
+    pub content: String,
+}
+
+impl ChatTurn {
+    pub fn user(content: impl Into<String>) -> Self {
+        Self {
+            role: ChatRole::User,
+            content: content.into(),
+        }
+    }
+
+    /// Assistant turns reach the backend by deserialization; this exists for
+    /// tests that build a conversation by hand.
+    #[cfg(test)]
+    pub fn assistant(content: impl Into<String>) -> Self {
+        Self {
+            role: ChatRole::Assistant,
+            content: content.into(),
+        }
+    }
+}
+
 impl ChatFormat {
     /// Opening token of every Gemma prompt.
     ///
@@ -77,18 +125,42 @@ impl ChatFormat {
     /// a duplicated `<bos>` and Gemma 4 with none.
     pub const BOS: &'static str = "<bos>";
 
+    /// Turn markers of this family, as `(start, end)`.
+    fn turn_markers(&self) -> (&'static str, &'static str) {
+        match self {
+            ChatFormat::GemmaTurn => ("<start_of_turn>", "<end_of_turn>"),
+            ChatFormat::Gemma4Turn => ("<|turn>", "<turn|>"),
+        }
+    }
+
     /// Wrap a user prompt into a single-turn conversation that ends ready for
     /// the model to speak.
     pub fn apply(&self, prompt: &str) -> String {
-        let bos = Self::BOS;
-        match self {
-            ChatFormat::GemmaTurn => {
-                format!("{bos}<start_of_turn>user\n{prompt}<end_of_turn>\n<start_of_turn>model\n")
-            }
-            ChatFormat::Gemma4Turn => {
-                format!("{bos}<|turn>user\n{prompt}<turn|>\n<|turn>model\n")
-            }
+        self.apply_conversation(std::slice::from_ref(&ChatTurn::user(prompt)))
+    }
+
+    /// Render a whole conversation, one marked turn per message, ending ready
+    /// for the model to speak.
+    ///
+    /// Each turn gets its own boundary so the model can tell earlier turns
+    /// from the question being asked now. Flattening the history into the
+    /// text of a single user turn loses that distinction, and the model then
+    /// answers the oldest question or repeats its previous reply.
+    /// Empty turns are dropped rather than emitted as an empty boundary.
+    pub fn apply_conversation(&self, turns: &[ChatTurn]) -> String {
+        let (start, end) = self.turn_markers();
+        let mut rendered = String::from(Self::BOS);
+        for turn in turns.iter().filter(|t| !t.content.trim().is_empty()) {
+            rendered.push_str(start);
+            rendered.push_str(turn.role.marker());
+            rendered.push('\n');
+            rendered.push_str(turn.content.trim());
+            rendered.push_str(end);
+            rendered.push('\n');
         }
+        rendered.push_str(start);
+        rendered.push_str("model\n");
+        rendered
     }
 
     /// A prompt sent without a chat template. It still has to open with
@@ -126,7 +198,41 @@ pub fn mock_detokenize(ids: &[i64]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::ChatFormat;
+    use super::{ChatFormat, ChatTurn};
+
+    #[test]
+    fn every_turn_of_a_conversation_gets_its_own_boundary() {
+        let turns = [
+            ChatTurn::user("一つ目"),
+            ChatTurn::assistant("一つ目の答え"),
+            ChatTurn::user("二つ目"),
+        ];
+        let rendered = ChatFormat::GemmaTurn.apply_conversation(&turns);
+        assert_eq!(
+            rendered,
+            "<bos><start_of_turn>user\n一つ目<end_of_turn>\n\
+             <start_of_turn>model\n一つ目の答え<end_of_turn>\n\
+             <start_of_turn>user\n二つ目<end_of_turn>\n\
+             <start_of_turn>model\n"
+        );
+        // The newest question is the last thing the model reads, so it cannot
+        // be mistaken for an earlier one.
+        let last_user = rendered.rfind("<start_of_turn>user").unwrap();
+        assert!(rendered[last_user..].contains("二つ目"));
+        assert!(!rendered[last_user..].contains("一つ目"));
+    }
+
+    #[test]
+    fn gemma4_history_uses_its_own_markers_and_drops_empty_turns() {
+        let rendered = ChatFormat::Gemma4Turn.apply_conversation(&[
+            ChatTurn::user("質問"),
+            ChatTurn::assistant("   "),
+            ChatTurn::user("次の質問"),
+        ]);
+        assert!(!rendered.contains("<start_of_turn>"));
+        assert_eq!(rendered.matches("<|turn>").count(), 3);
+        assert!(!rendered.contains("model\n<turn|>"));
+    }
 
     #[test]
     fn each_family_uses_its_own_turn_markers() {

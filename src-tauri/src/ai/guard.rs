@@ -32,18 +32,52 @@ pub fn check_hint_leak(hint: &str, question: &QuizQuestion) -> Option<String> {
     None
 }
 
-/// Sanitize an AI-generated hint: check for answer leaks and truncate.
+/// Sanitize an AI-generated hint: check for answer leaks and excessive length.
 ///
 /// Matches Swift `sanitizedHint` behavior:
 /// - Empty or leaking hint → fallback to `question.hints[level-1]`
-/// - Safe hint → truncate to 80 characters
+/// - Overlong hint → bank fallback rather than a sentence cut mid-way
 pub fn sanitize_hint(hint: &str, question: &QuizQuestion, level: i32) -> String {
     let cleaned = hint.trim();
-    if cleaned.is_empty() || check_hint_leak(cleaned, question).is_some() {
+    if cleaned.is_empty()
+        || cleaned.chars().count() > 80
+        || cleaned.lines().count() > 1
+        || cleaned.starts_with("段階")
+        || cleaned.rsplit_once('。').is_some_and(|(_, tail)| {
+            !tail.trim().is_empty() && tail.trim().chars().all(|c| c.is_ascii_digit())
+        })
+        || check_hint_leak(cleaned, question).is_some()
+    {
         return fallback_hint(question, level);
     }
-    // Truncate to 80 chars (matching Swift behavior)
-    cleaned.chars().take(80).collect()
+    cleaned.to_string()
+}
+
+/// Repeating a displayed hint does not advance the student's next step.
+pub fn sanitize_hint_with_history(
+    hint: &str,
+    question: &QuizQuestion,
+    level: i32,
+    previous: &[String],
+) -> String {
+    let delivered = sanitize_hint(hint, question, level);
+    let comparable = |s: &str| {
+        RuleBasedLearningEngine::normalize(s)
+            .chars()
+            .filter(|c| c.is_alphanumeric())
+            .collect::<String>()
+    };
+    let normalized = comparable(&delivered);
+    if previous
+        .iter()
+        .rev()
+        .take(3)
+        .any(|prior| comparable(prior) == normalized)
+    {
+        fallback_hint(question, level)
+    } else {
+        delivered
+    }
 }
 
 /// Get the fallback hint at the given level (1-indexed).
@@ -225,11 +259,11 @@ mod guard_tests {
     }
 
     #[test]
-    fn test_sanitize_hint_truncates_to_80() {
+    fn test_sanitize_hint_overlong_uses_complete_bank_hint() {
         let q = question_with_answers();
         let long_hint = "あ".repeat(100);
         let result = sanitize_hint(&long_hint, &q, 1);
-        assert_eq!(result.chars().count(), 80);
+        assert_eq!(result, q.hints[0]);
     }
 
     #[test]

@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { baseInputFocus } from "../styles/global.css.ts";
 import { errorMessage, privacyNote } from "../styles/shared.css.ts";
 import {
@@ -32,6 +32,7 @@ export interface DiscoveredTeacher {
 }
 
 export interface JoinResultPayload {
+  sessionId?: string;
   participantToken: string | null;
   quiz: unknown | null;
 }
@@ -50,7 +51,11 @@ export function StudentJoin({ onJoined, onReset }: StudentJoinProps) {
   const [joinCode, setJoinCode] = useState("");
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const [isJoining, setIsJoining] = useState(false);
+  const joining = useRef(false);
+
+  const searchTeachers = useCallback(() => {
+    setError(null);
     setIsBrowsing(true);
     invoke<DiscoveredTeacher[]>("browse_teachers")
       .then(setTeachers)
@@ -61,10 +66,15 @@ export function StudentJoin({ onJoined, onReset }: StudentJoinProps) {
       .finally(() => setIsBrowsing(false));
   }, []);
 
+  useEffect(searchTeachers, [searchTeachers]);
+
   const filteredJoinCode = (value: string) =>
     value.replace(/\D/g, "").slice(0, 4);
 
   const handleJoin = async (teacher: DiscoveredTeacher) => {
+    if (joining.current) return;
+    joining.current = true;
+    setIsJoining(true);
     setError(null);
     try {
       const res = await invoke<JoinResultPayload>("student_join", {
@@ -76,23 +86,24 @@ export function StudentJoin({ onJoined, onReset }: StudentJoinProps) {
       onJoined(res);
     } catch (e) {
       setError(String(e));
+    } finally {
+      joining.current = false;
+      setIsJoining(false);
     }
   };
 
-  const handleManualJoin = async () => {
-    if (!manualIp || !manualPort || !joinCode) return;
-    setError(null);
-    try {
-      const res = await invoke<JoinResultPayload>("student_join", {
-        host: manualIp,
-        port: parseInt(manualPort, 10),
-        sessionId: "",
-        joinCode,
-      });
-      onJoined(res);
-    } catch (e) {
-      setError(String(e));
-    }
+  const validPort =
+    /^\d+$/.test(manualPort) &&
+    Number(manualPort) >= 1 &&
+    Number(manualPort) <= 65535;
+  const handleManualJoin = () => {
+    if (!manualIp.trim() || !validPort || joinCode.length !== 4) return;
+    return handleJoin({
+      name: "",
+      host: manualIp.trim(),
+      port: Number(manualPort),
+      session_uuid: "",
+    });
   };
 
   const canJoin = joinCode.length === 4;
@@ -106,7 +117,21 @@ export function StudentJoin({ onJoined, onReset }: StudentJoinProps) {
         </button>
       </div>
 
-      <p className={joinSubtitle}>同じWi-Fiにいる先生を探しています…</p>
+      <p className={joinSubtitle} role="status">
+        {isBrowsing
+          ? "同じWi-Fiにいる先生を探しています…"
+          : teachers.length > 0
+            ? "参加する教室を選んでください"
+            : "教室が見つかりませんでした。同じWi-Fiか確認し、再検索または手動入力で参加できます。"}
+      </p>
+      <button
+        type="button"
+        className={joinReset}
+        onClick={searchTeachers}
+        disabled={isBrowsing || isJoining}
+      >
+        {isBrowsing ? "検索中…" : "教室を再検索"}
+      </button>
 
       <div className={joinCard}>
         {isBrowsing && teachers.length === 0 && (
@@ -131,6 +156,7 @@ export function StudentJoin({ onJoined, onReset }: StudentJoinProps) {
                     inputMode="numeric"
                     autoComplete="one-time-code"
                     placeholder="4桁の参加コード"
+                    aria-label="4桁の参加コード"
                     value={joinCode}
                     onChange={(e) =>
                       setJoinCode(filteredJoinCode(e.target.value))
@@ -141,9 +167,9 @@ export function StudentJoin({ onJoined, onReset }: StudentJoinProps) {
                     className={joinButton}
                     type="button"
                     onClick={() => handleJoin(teacher)}
-                    disabled={!canJoin}
+                    disabled={!canJoin || isJoining}
                   >
-                    参加
+                    {isJoining ? "参加中…" : "参加"}
                   </button>
                 </div>
               ))}
@@ -157,13 +183,19 @@ export function StudentJoin({ onJoined, onReset }: StudentJoinProps) {
             <input
               className={`${manualInput} ${baseInputFocus}`}
               placeholder="IPアドレス"
+              aria-label="IPアドレス"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
               value={manualIp}
               onChange={(e) => setManualIp(e.target.value)}
             />
             <input
               className={`${manualInput} ${baseInputFocus}`}
               placeholder="ポート"
-              type="number"
+              type="text"
+              inputMode="numeric"
+              aria-label="ポート"
               value={manualPort}
               onChange={(e) => setManualPort(e.target.value)}
             />
@@ -173,6 +205,7 @@ export function StudentJoin({ onJoined, onReset }: StudentJoinProps) {
               inputMode="numeric"
               autoComplete="one-time-code"
               placeholder="4桁の参加コード"
+              aria-label="4桁の参加コード"
               value={joinCode}
               onChange={(e) => setJoinCode(filteredJoinCode(e.target.value))}
               maxLength={4}
@@ -182,9 +215,9 @@ export function StudentJoin({ onJoined, onReset }: StudentJoinProps) {
             className={joinButton}
             type="button"
             onClick={handleManualJoin}
-            disabled={!manualIp || !manualPort || !canJoin}
+            disabled={!manualIp.trim() || !validPort || !canJoin || isJoining}
           >
-            参加
+            {isJoining ? "参加中…" : "参加"}
           </button>
         </div>
       </div>

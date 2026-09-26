@@ -12,7 +12,8 @@
       "!!target",
       "!!dist",
       "!!bun.lock",
-      "!!.omo"
+      "!!.omo",
+      "!!vendor"
     ]
   },
   "formatter": {

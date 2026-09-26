@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   joinCodeLabel,
   joinCodeValue,
@@ -9,7 +9,6 @@ import {
   secondaryButton,
 } from "../styles/shared.css.ts";
 import { LessonPlanEditor } from "./LessonPlanEditor";
-import { ModelManager } from "./ModelManager";
 import type { Quiz } from "./StudentQuiz";
 import { TeacherChat } from "./TeacherChat";
 import {
@@ -56,10 +55,11 @@ import {
   teacherSidebar,
 } from "./TeacherDashboard.css.ts";
 import { TeacherSessionControl } from "./TeacherSessionControl";
+import { useLessonPlan } from "./useLessonPlan";
 
-export interface TeacherDashboardProps {
-  onReset?: () => void;
-}
+// The app bar carries the role badge and the way out of it, so the sidebar is
+// only the teacher's own tabs.
+export type TeacherDashboardProps = Record<string, never>;
 
 type TeacherTab = "dashboard" | "session" | "lesson" | "chat";
 
@@ -108,18 +108,31 @@ function ChatView({
   return <TeacherChat classSummary={classSummary} activeQuiz={activeQuiz} />;
 }
 
-export function TeacherDashboard({ onReset }: TeacherDashboardProps) {
+export function TeacherDashboard() {
+  const contentRef = useRef<HTMLDivElement>(null);
   const [tab, setTab] = useState<TeacherTab>("dashboard");
+  const [chatVisited, setChatVisited] = useState(false);
   const [sessionCode, setSessionCode] = useState<string | null>(null);
   const [summary, setSummary] = useState<ClassSummary | null>(null);
   const [events, setEvents] = useState<AnalysisEvent[]>([]);
   const [isLoadingDemo, setIsLoadingDemo] = useState(false);
-  const [activeQuiz] = useState<Quiz | null>(null);
+  const [activeQuiz, setActiveQuiz] = useState<Quiz | null>(null);
+
+  // The plan and its generation live here, above the tab switch: the editor is
+  // unmounted whenever another tab is shown, and a generation outlives that by
+  // tens of seconds. It only starts once the teacher opens the tab.
+  const lessonPlan = useLessonPlan(summary, activeQuiz, tab === "lesson");
 
   const refreshSummary = useCallback(async () => {
     try {
       const s = await invoke<ClassSummary>("get_class_summary");
       setSummary(s);
+      const session = await invoke<{
+        quiz: Quiz | null;
+        joinCode: string | null;
+      }>("get_teacher_session");
+      setActiveQuiz(session.quiz);
+      setSessionCode(session.joinCode);
     } catch (e) {
       console.error("get_class_summary failed", e);
     }
@@ -173,20 +186,19 @@ export function TeacherDashboard({ onReset }: TeacherDashboardProps) {
                 ? `${sidebarButton} ${sidebarButtonActive}`
                 : sidebarButton
             }
-            onClick={() => setTab(t.id)}
+            onClick={() => {
+              if (t.id === "chat") setChatVisited(true);
+              setTab(t.id);
+              if (contentRef.current) contentRef.current.scrollTop = 0;
+            }}
             aria-current={tab === t.id ? "page" : undefined}
           >
             {t.label}
           </button>
         ))}
-        {onReset && (
-          <button type="button" className={sidebarButton} onClick={onReset}>
-            役割を切り替える
-          </button>
-        )}
       </nav>
 
-      <div className={teacherContent}>
+      <div ref={contentRef} className={teacherContent}>
         {/* 参加コード常時表示(セッション有効中・全タブ共通) */}
         {sessionCode && (
           <div className={joinCodeBanner} role="status" aria-live="polite">
@@ -356,26 +368,18 @@ export function TeacherDashboard({ onReset }: TeacherDashboardProps) {
           <TeacherSessionControl
             onSessionStarted={(code) => {
               setSessionCode(code);
+              void refreshSummary();
               setTab("dashboard");
             }}
-            onSessionEnded={() => setSessionCode(null)}
+            onSessionEnded={() => {
+              setSessionCode(null);
+              setActiveQuiz(null);
+              void refreshSummary();
+            }}
           />
         )}
         {tab === "lesson" && summary && (
-          <LessonPlanEditor
-            classSummary={{
-              participantCount: summary.participantCount,
-              responseCount: summary.responseCount,
-              correctRate: summary.correctRate,
-              retrySuccessRate: summary.retrySuccessRate,
-              averageHints: summary.averageHints,
-              misconceptions: summary.misconceptions.map((m) => ({
-                concept: m.name,
-                count: m.count,
-              })),
-            }}
-            onAdopted={() => {}}
-          />
+          <LessonPlanEditor draft={lessonPlan} onAdopted={() => {}} />
         )}
         {tab === "lesson" && !summary && (
           <div className={card}>
@@ -384,15 +388,18 @@ export function TeacherDashboard({ onReset }: TeacherDashboardProps) {
             </p>
           </div>
         )}
-        {tab === "chat" && (
-          <>
-            <section className="model-manager-panel">
-              <h2>AIモデル管理</h2>
-              <ModelManager />
-            </section>
+        <div
+          hidden={tab !== "chat"}
+          style={{
+            display: tab === "chat" ? "flex" : "none",
+            flex: 1,
+            minHeight: 0,
+          }}
+        >
+          {chatVisited && (
             <ChatView classSummary={summary} activeQuiz={activeQuiz} />
-          </>
-        )}
+          )}
+        </div>
       </div>
     </section>
   );

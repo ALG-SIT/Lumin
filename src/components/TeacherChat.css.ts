@@ -19,15 +19,18 @@ import { globalStyle, keyframes, style } from "@vanilla-extract/css";
 export const teacherChat = style({
   display: "flex",
   flexDirection: "column",
-  height: "100%",
+  flex: "1 1 0",
+  minHeight: 0,
+  width: "100%",
   maxWidth: "1000px",
   margin: "0 auto",
   padding: "var(--space-5)",
   gap: "var(--space-4)",
   background: "var(--lumin-bg)",
   "@media": {
-    "(max-width: 640px)": {
-      padding: "var(--space-3)",
+    "(max-width: 640px), (max-height: 500px)": {
+      padding: "0",
+      gap: "8px",
     },
   },
 });
@@ -39,65 +42,62 @@ const spin = keyframes({
   },
 });
 
-// index.css L727-737 + @media 640px L1011-1014.
-export const teacherChatHeader = style({
+// The conversation and the box you write in are one surface.
+//
+// They used to be two cards with the suggestion chips between them, which cost
+// two borders, two shadows and two gaps of vertical space, and read as three
+// separate things rather than one conversation. Merging them hands that space
+// back to the transcript, which is the part that needs it.
+//
+// DIVERGENCE from index.css: the card treatment (background, border, radius,
+// shadow) moves from the history and the composer onto this wrapper; the
+// pieces below keep only their own spacing.
+export const teacherChatPanel = style({
+  flex: "1 1 0",
+  minHeight: 0,
   display: "flex",
-  alignItems: "flex-start",
-  justifyContent: "space-between",
-  gap: "var(--space-3)",
-  padding: "var(--space-4) var(--space-5)",
+  flexDirection: "column",
   background: "var(--lumin-card)",
   border: "1px solid var(--lumin-border)",
-  borderRadius: "var(--radius-lg)",
+  borderRadius: "28px",
   boxShadow: "var(--shadow-sm)",
-  "@media": {
-    "(max-width: 640px)": {
-      flexDirection: "column",
-      gap: "var(--space-2)",
-    },
-  },
+  // The history scrolls inside; without this its rounded corners are painted
+  // over by the scrolling content.
+  overflow: "hidden",
 });
 
-// index.css L739-743 (`.teacher-chat-header h2`, unclassed h2).
-globalStyle(`${teacherChatHeader} h2`, {
-  margin: "0 0 var(--space-1) 0",
-  fontSize: "1.5rem",
-  color: "var(--lumin-ink)",
-});
-
-// index.css L745-749 (`.teacher-chat-header p`, unclassed p).
-globalStyle(`${teacherChatHeader} p`, {
-  margin: "0",
-  color: "var(--lumin-text-secondary)",
-  fontSize: "0.9375rem",
-});
-
-// index.css L751-757.
-export const teacherChatPrivacy = style({
-  display: "flex",
-  alignItems: "center",
-  gap: "var(--space-2)",
-  fontSize: "0.8125rem",
-  color: "var(--lumin-muted)",
-});
-
-// index.css L759-772 + @media 640px L1020-1022.
+// index.css L759-772 + @media 640px L1020-1022, minus the card treatment now
+// carried by teacherChatPanel.
 export const teacherChatHistory = style({
   flex: "1 1 auto",
-  minHeight: "280px",
-  maxHeight: "60vh",
+  minHeight: 0,
+  overscrollBehavior: "contain",
+  overflowAnchor: "none",
   overflowY: "auto",
   display: "flex",
   flexDirection: "column",
   gap: "var(--space-3)",
   padding: "var(--space-5)",
-  background: "var(--lumin-card)",
-  border: "1px solid var(--lumin-border)",
-  borderRadius: "var(--radius-lg)",
-  boxShadow: "var(--shadow-sm)",
   "@media": {
     "(max-width: 640px)": {
       padding: "var(--space-3)",
+    },
+  },
+});
+
+// Suggestions and the input share the foot of the same panel, divided from the
+// transcript by a hairline instead of a gap.
+export const teacherChatFooter = style({
+  flexShrink: 0,
+  display: "flex",
+  flexDirection: "column",
+  gap: "var(--space-2)",
+  padding: "var(--space-3) var(--space-4)",
+  borderTop: "1px solid var(--lumin-border)",
+  background: "var(--lumin-card)",
+  "@media": {
+    "(max-width: 640px)": {
+      padding: "var(--space-2) var(--space-3)",
     },
   },
 });
@@ -231,6 +231,13 @@ export const teacherChatThinking = style({
 
 // index.css L864-868.
 export const teacherChatSuggestions = style({
+  "@media": {
+    "(max-width: 640px), (max-height: 500px)": {
+      flexWrap: "nowrap",
+      overflowX: "auto",
+      paddingBottom: "4px",
+    },
+  },
   display: "flex",
   flexWrap: "wrap",
   gap: "var(--space-2)",
@@ -241,6 +248,8 @@ export const teacherChatSuggestions = style({
 // rm `&:active` form (0,2,0) still loses to `:active:not(:disabled)` (0,3,0),
 // so the :active scale survives exactly like the source cascade.
 export const teacherChatChip = style({
+  flexShrink: 0,
+  minHeight: "44px",
   padding: "var(--space-2) var(--space-3)",
   fontSize: "0.875rem",
   fontWeight: "500",
@@ -285,16 +294,12 @@ export const teacherChatChip = style({
   },
 });
 
-// index.css L896-905.
+// index.css L896-905, minus the card treatment now carried by
+// teacherChatPanel: the composer sits inside it.
 export const teacherChatComposer = style({
   display: "flex",
   flexDirection: "column",
-  gap: "var(--space-3)",
-  padding: "var(--space-4)",
-  background: "var(--lumin-card)",
-  border: "1px solid var(--lumin-border)",
-  borderRadius: "var(--radius-lg)",
-  boxShadow: "var(--shadow-sm)",
+  gap: "var(--space-2)",
 });
 
 // index.css L907-913.
@@ -325,6 +330,7 @@ export const teacherChatInputRow = style({
 // were unable to be assigned to a file".
 export const teacherChatInput = style({
   flex: "1",
+  minWidth: 0,
   resize: "none",
   minHeight: "48px",
   maxHeight: "160px",
@@ -334,7 +340,7 @@ export const teacherChatInput = style({
   color: "var(--lumin-ink)",
   background: "var(--lumin-canvas)",
   border: "1px solid var(--lumin-border)",
-  borderRadius: "var(--radius-md)",
+  borderRadius: "16px",
   outline: "none",
   transition: "border-color 0.2s ease, box-shadow 0.2s ease",
   ":focus": {
@@ -421,4 +427,18 @@ export const teacherChatFooterNote = style({
   fontSize: "0.75rem",
   color: "var(--lumin-muted)",
   textAlign: "center",
+});
+
+globalStyle(
+  `:root[data-keyboard-open] ${teacherChatSuggestions}, :root[data-keyboard-open] ${teacherChatFooterNote}`,
+  {
+    "@media": {
+      "(max-width: 640px), (max-height: 500px)": { display: "none" },
+    },
+  },
+);
+
+// Landscape phones need space for the transcript and composer before focus.
+globalStyle(`${teacherChatSuggestions}, ${teacherChatFooterNote}`, {
+  "@media": { "(max-height: 500px)": { display: "none" } },
 });
