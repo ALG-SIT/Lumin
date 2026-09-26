@@ -270,11 +270,6 @@ impl AppState {
     }
 }
 
-/// Create an ort session with platform-appropriate execution providers
-pub fn create_session<P: AsRef<Path>>(model_path: P) -> Result<Session> {
-    create_session_with_provider(model_path, super::runtime::selected()?)
-}
-
 pub fn create_session_with_provider<P: AsRef<Path>>(
     model_path: P,
     provider: super::runtime::Provider,
@@ -308,7 +303,7 @@ pub fn create_session_with_provider<P: AsRef<Path>>(
         builder = builder.with_devices(devices, Some(&options)).map_err(err)?;
     } else {
         let ep = match provider {
-            #[cfg(feature = "cuda")]
+            #[cfg(not(target_os = "ios"))]
             Provider::Cuda => ort::ep::CUDA::default().build(),
             #[cfg(feature = "tensorrt")]
             Provider::TensorRt => {

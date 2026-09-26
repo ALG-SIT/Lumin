@@ -179,11 +179,17 @@ pub enum LessonPlanProgress {
         attempt: usize,
     },
     /// Checking the model's JSON against the schema.
-    Validating { attempt: usize },
+    Validating {
+        attempt: usize,
+    },
     /// The output failed validation; the model is asked to correct it once.
-    Repairing { reason: String },
+    Repairing {
+        reason: String,
+    },
     /// No usable plan came back, so the rule-based plan is used instead.
-    Fallback { reason: String },
+    Fallback {
+        reason: String,
+    },
     Done,
 }
 
@@ -880,9 +886,14 @@ mod tests {
 
         let first_question = "最も多い誤概念は何件ですか。";
         let first = chat_output(
-            generate_conversation(state, &teacher_chat_turns(&ctx, first_question), Some(256), None)
-                .await
-                .unwrap(),
+            generate_conversation(
+                state,
+                &teacher_chat_turns(&ctx, first_question),
+                Some(256),
+                None,
+            )
+            .await
+            .unwrap(),
         )
         .unwrap();
         println!("\n===== [{variant}] turn1: {first_question}\n{first}");
@@ -892,17 +903,22 @@ mod tests {
             first.contains("added numerators"),
             "[{variant}] turn 1 ignored the recorded misconception: {first}"
         );
-        assert!(first.contains('4'), "[{variant}] turn 1 lost the count: {first}");
+        assert!(
+            first.contains('4'),
+            "[{variant}] turn 1 lost the count: {first}"
+        );
 
-        ctx.history = vec![
-            ChatTurn::user(first_question),
-            ChatTurn::assistant(&first),
-        ];
+        ctx.history = vec![ChatTurn::user(first_question), ChatTurn::assistant(&first)];
         let second_question = "それを踏まえて、次の授業でやることを箇条書きで教えて。";
         let follow_up = chat_output(
-            generate_conversation(state, &teacher_chat_turns(&ctx, second_question), Some(384), None)
-                .await
-                .unwrap(),
+            generate_conversation(
+                state,
+                &teacher_chat_turns(&ctx, second_question),
+                Some(384),
+                None,
+            )
+            .await
+            .unwrap(),
         )
         .unwrap();
         println!("\n===== [{variant}] turn2: {second_question}\n{follow_up}");
@@ -1033,10 +1049,14 @@ mod tests {
         };
         let question = "一次関数の傾きについて、定義、求め方、グラフ上の意味、\
                         よくある誤解とその指導法を、順を追って詳しく説明してください。";
-        let result =
-            generate_conversation(&state, &teacher_chat_turns(&ctx, question), CHAT_BUDGET, None)
-                .await
-                .unwrap();
+        let result = generate_conversation(
+            &state,
+            &teacher_chat_turns(&ctx, question),
+            CHAT_BUDGET,
+            None,
+        )
+        .await
+        .unwrap();
 
         println!(
             "{} tok in {} ms ({:.1} tok/s), truncated: {}\n{}",

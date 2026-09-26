@@ -1,10 +1,29 @@
 //! One ONNX Runtime, with platform execution providers. No model-specific runtime.
 use anyhow::{anyhow, bail, Result};
-use std::{path::PathBuf, sync::OnceLock};
+use std::{
+    path::PathBuf,
+    sync::{Mutex, OnceLock},
+};
 
 static RESOURCE_DIR: OnceLock<PathBuf> = OnceLock::new();
 static INITIALIZED: OnceLock<std::result::Result<(), String>> = OnceLock::new();
 static WEBGPU_REGISTERED: OnceLock<std::result::Result<(), String>> = OnceLock::new();
+
+// Record the provider only after both model graphs have loaded successfully.
+static ACTIVE_PROVIDER: Mutex<Option<Provider>> = Mutex::new(None);
+
+pub fn active_provider_label() -> Option<&'static str> {
+    ACTIVE_PROVIDER
+        .lock()
+        .ok()
+        .and_then(|provider| provider.map(Provider::label))
+}
+
+pub fn record_active_provider(provider: Provider) {
+    if let Ok(mut active) = ACTIVE_PROVIDER.lock() {
+        *active = Some(provider);
+    }
+}
 
 pub fn set_resource_dir(path: PathBuf) {
     let _ = RESOURCE_DIR.set(path);
@@ -60,27 +79,46 @@ impl Provider {
 
 pub fn selected() -> Result<Provider> {
     if let Ok(value) = std::env::var("LUMIN_EXECUTION_PROVIDER") {
+        if value == "auto" {
+            return Ok(default_provider());
+        }
         return Provider::parse(&value);
     }
+    Ok(default_provider())
+}
+
+fn default_provider() -> Provider {
     // An accelerator build feature is an explicit deployment preference.
     if cfg!(feature = "tensorrt") {
-        Ok(Provider::TensorRt)
+        Provider::TensorRt
     } else if cfg!(feature = "cuda") {
-        Ok(Provider::Cuda)
+        Provider::Cuda
     } else if cfg!(feature = "directml") {
-        Ok(Provider::DirectMl)
+        Provider::DirectMl
     } else if cfg!(feature = "coreml") {
-        Ok(Provider::CoreMl)
+        Provider::CoreMl
     } else if cfg!(feature = "nnapi") {
-        Ok(Provider::Nnapi)
+        Provider::Nnapi
     } else if cfg!(feature = "xnnpack") {
-        Ok(Provider::Xnnpack)
+        Provider::Xnnpack
     } else if cfg!(target_os = "ios") {
         // WebGPU EP は別の dylib を実行時に登録する必要があり、iOS では同梱できない。
         // 静的リンクした ONNX Runtime に入っている CoreML が唯一の GPU 経路。
-        Ok(Provider::CoreMl)
+        Provider::CoreMl
     } else {
-        Ok(Provider::WebGpu)
+        Provider::WebGpu
+    }
+}
+
+/// Candidates for an unpinned desktop session. Linux prefers CUDA then WebGPU;
+/// Windows falls back from WebGPU to CPU when D3D12 initialization fails.
+pub fn automatic_candidates() -> Vec<Provider> {
+    if cfg!(target_os = "linux") {
+        vec![Provider::Cuda, Provider::WebGpu, Provider::Cpu]
+    } else if cfg!(target_os = "windows") {
+        vec![Provider::WebGpu, Provider::Cpu]
+    } else {
+        vec![default_provider()]
     }
 }
 
@@ -95,6 +133,23 @@ pub fn selected_for_variant(variant: &super::catalog::Variant) -> Result<Provide
         return Ok(Provider::Cpu);
     }
     selected()
+}
+
+/// Preserve explicit overrides and the iOS Gemma 4 CPU rule while allowing
+/// Linux builds to test CUDA and WebGPU before falling back to the CPU.
+pub fn candidates_for_variant(variant: &super::catalog::Variant) -> Result<Vec<Provider>> {
+    if cfg!(target_os = "ios")
+        && variant.chat_format == super::tokenizer::ChatFormat::Gemma4Turn
+        && std::env::var_os("LUMIN_EXECUTION_PROVIDER").is_none()
+    {
+        return Ok(vec![Provider::Cpu]);
+    }
+    if let Ok(value) = std::env::var("LUMIN_EXECUTION_PROVIDER") {
+        if value != "auto" {
+            return Ok(vec![Provider::parse(&value)?]);
+        }
+    }
+    Ok(automatic_candidates())
 }
 
 pub fn library_path(plugin: bool) -> Result<PathBuf> {
@@ -164,12 +219,32 @@ pub fn register_webgpu() -> Result<std::sync::Arc<ort::environment::Environment>
     let env = ort::environment::Environment::current()?;
     WEBGPU_REGISTERED
         .get_or_init(|| {
-            env.register_ep_library(
-                "lumin_webgpu",
-                library_path(true).map_err(|e| e.to_string())?,
-            )
-            .map(|_| ())
-            .map_err(|e| e.to_string())
+            let library = library_path(true).map_err(|e| e.to_string())?;
+            #[cfg(target_os = "windows")]
+            {
+                let directory = library.parent().ok_or_else(|| {
+                    format!(
+                        "WebGPU EP DLL has no parent directory: {}",
+                        library.display()
+                    )
+                })?;
+                // Dawn's D3D12 backend loads these helper DLLs by basename.
+                // Preload the official wheel copies by absolute path so they
+                // work when the app's runtime directory is not on PATH.
+                for name in ["dxil.dll", "dxcompiler.dll"] {
+                    let dependency = directory.join(name);
+                    if !dependency.is_file() {
+                        return Err(format!(
+                            "Dawn D3D12 dependency is missing: {}",
+                            dependency.display()
+                        ));
+                    }
+                    ort::util::preload_dylib(&dependency).map_err(|e| e.to_string())?;
+                }
+            }
+            env.register_ep_library("lumin_webgpu", library)
+                .map(|_| ())
+                .map_err(|e| e.to_string())
         })
         .as_ref()
         .map_err(|e| anyhow!("WebGPU EPを登録できません: {e}"))?;
@@ -184,5 +259,14 @@ mod tests {
         assert!(Provider::parse("cdua").is_err());
         assert_eq!(Provider::parse("cpu").unwrap(), Provider::Cpu);
         assert_eq!(Provider::parse("webgpu").unwrap(), Provider::WebGpu);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn linux_auto_prefers_cuda_then_webgpu_then_cpu() {
+        assert_eq!(
+            automatic_candidates(),
+            vec![Provider::Cuda, Provider::WebGpu, Provider::Cpu]
+        );
     }
 }

@@ -32,6 +32,7 @@ pub struct SystemInfo {
     pub tauri_version: String,
     pub ort_available: bool,
     pub model_dir: String,
+    pub execution_provider: Option<String>,
 }
 
 #[tauri::command]
@@ -42,6 +43,7 @@ async fn get_system_info(state: State<'_, AppState>) -> Result<SystemInfo, Strin
         tauri_version: "2".to_string(),
         ort_available: true,
         model_dir: state.model_dir.to_string_lossy().to_string(),
+        execution_provider: inference::runtime::active_provider_label().map(str::to_owned),
     })
 }
 

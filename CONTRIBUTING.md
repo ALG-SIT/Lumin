@@ -5,7 +5,7 @@ This guide is the canonical contributor workflow for Lumin. It covers GitHub Flo
 ## Prerequisites
 
 - **Bun** 1.x (package manager and runtime)
-- **Rust** 1.77 or later
+- **Rust** 1.82 or later
 - Tauri system dependencies for your platform (see `README.md`)
 
 ## Getting started

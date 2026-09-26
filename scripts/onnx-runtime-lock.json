@@ -20,6 +20,10 @@
       {
         "url": "https://files.pythonhosted.org/packages/97/9c/d37bc05c56c3d91d44585db7bebbf0f068ece5d01df5b3898449771d4bf2/onnxruntime_ep_webgpu-0.3.0-py3-none-manylinux_2_28_x86_64.whl",
         "sha256": "865ce82d80319d7f259a4a65e66e32834f0f117db55ae4377868b4f28016e7bf"
+      },
+      {
+        "url": "https://files.pythonhosted.org/packages/ea/71/b225bd559a718f6cefb058d4f4c4c95e556543f47d4be0e81819681ac347/onnxruntime_gpu-1.30.0-cp311-cp311-manylinux_2_28_x86_64.whl",
+        "sha256": "4fbf0c5d7b5fb99266c2e8a802e3e64af68bdc383e0f3c7349b985f1087eedaa"
       }
     ],
     "windows-x86_64": [
