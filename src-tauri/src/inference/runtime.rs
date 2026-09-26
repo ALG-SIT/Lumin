@@ -133,11 +133,13 @@ fn default_provider() -> Provider {
     }
 }
 
-/// Candidates for an unpinned desktop session. WSL/NVIDIA benefits from CUDA
-/// first; WebGPU keeps other Linux GPU vendors on the portable Vulkan path.
+/// Candidates for an unpinned desktop session. Linux prefers CUDA then WebGPU;
+/// Windows falls back from WebGPU to CPU when D3D12 initialization fails.
 pub fn automatic_candidates() -> Vec<Provider> {
     if cfg!(target_os = "linux") {
         vec![Provider::Cuda, Provider::WebGpu, Provider::Cpu]
+    } else if cfg!(target_os = "windows") {
+        vec![Provider::WebGpu, Provider::Cpu]
     } else {
         vec![default_provider()]
     }
@@ -240,12 +242,32 @@ pub fn register_webgpu() -> Result<std::sync::Arc<ort::environment::Environment>
     let env = ort::environment::Environment::current()?;
     WEBGPU_REGISTERED
         .get_or_init(|| {
-            env.register_ep_library(
-                "lumin_webgpu",
-                library_path(true).map_err(|e| e.to_string())?,
-            )
-            .map(|_| ())
-            .map_err(|e| e.to_string())
+            let library = library_path(true).map_err(|e| e.to_string())?;
+            #[cfg(target_os = "windows")]
+            {
+                let directory = library.parent().ok_or_else(|| {
+                    format!(
+                        "WebGPU EP DLL has no parent directory: {}",
+                        library.display()
+                    )
+                })?;
+                // Dawn's D3D12 backend loads these helper DLLs by basename.
+                // Preload the official wheel copies by absolute path so they
+                // work when the app's runtime directory is not on PATH.
+                for name in ["dxil.dll", "dxcompiler.dll"] {
+                    let dependency = directory.join(name);
+                    if !dependency.is_file() {
+                        return Err(format!(
+                            "Dawn D3D12 dependency is missing: {}",
+                            dependency.display()
+                        ));
+                    }
+                    ort::util::preload_dylib(&dependency).map_err(|e| e.to_string())?;
+                }
+            }
+            env.register_ep_library("lumin_webgpu", library)
+                .map(|_| ())
+                .map_err(|e| e.to_string())
         })
         .as_ref()
         .map_err(|e| anyhow!("WebGPU EPを登録できません: {e}"))?;
