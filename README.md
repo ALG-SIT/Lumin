@@ -74,7 +74,7 @@ Tauri 2 の公式前提を満たしていることを確認してください。
 ### 2) Rust / Bun
 
 ```bash
-rustc --version  # 1.77+
+rustc --version  # 1.82+
 bun --version    # 1.x
 ```
 
