@@ -223,12 +223,18 @@ mod tests {
     #[tokio::test]
     async fn persistence_returns_read_and_write_errors_instead_of_succeeding() {
         let dir = tempdir().unwrap();
+        let history_path = dir.path().join("session-history.json");
+        fs::create_dir(&history_path).await.unwrap();
+        let persistence = Persistence::new(dir.path().into());
+
+        // Reading a directory as the history file fails consistently across platforms.
+        assert!(persistence.load_history().await.is_err());
+
         let blocker = dir.path().join("not-a-directory");
         fs::write(&blocker, b"keep this file").await.unwrap();
-        let persistence = Persistence::new(blocker.clone());
+        let blocked_persistence = Persistence::new(blocker.clone());
 
-        assert!(persistence.load_history().await.is_err());
-        assert!(persistence.save_pending(&[]).await.is_err());
+        assert!(blocked_persistence.save_pending(&[]).await.is_err());
         assert_eq!(fs::read(blocker).await.unwrap(), b"keep this file");
     }
 

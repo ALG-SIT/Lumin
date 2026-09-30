@@ -6,7 +6,7 @@ describe("Tauri teacher and student classroom flow", () => {
     const student = browser.student;
 
     await expect(teacher.$("h1")).toHaveText("Lumin");
-    await teacher.$("button[aria-label='先生画面を開く']").click();
+    await teacher.$("button[aria-label='先生として始める画面を開く']").click();
     await expect(teacher.$("[aria-label='先生ダッシュボード']")).toExist();
     await teacher.$("button=セッション").click();
     await teacher.$("button*=一次関数 3分デモ").click();
@@ -16,7 +16,7 @@ describe("Tauri teacher and student classroom flow", () => {
     const code = await joinCode.getText();
 
     await expect(student.$("h1")).toHaveText("Lumin");
-    await student.$("button[aria-label='生徒画面を開く']").click();
+    await student.$("button[aria-label='生徒として参加画面を開く']").click();
     await student.$("input[aria-label='IPアドレス']").setValue("127.0.0.1");
     await student.$("input[aria-label='ポート']").setValue("8765");
     await student.$("input[aria-label='4桁の参加コード']").setValue(code);
