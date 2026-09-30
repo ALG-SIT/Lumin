@@ -74,7 +74,13 @@ async fn remote_content_length(client: &reqwest::Client, url: &str) -> Option<u6
     if !resp.status().is_success() {
         return None;
     }
-    resp.content_length().filter(|&n| n > 0)
+    resp.headers()
+        .get(reqwest::header::CONTENT_LENGTH)?
+        .to_str()
+        .ok()?
+        .parse::<u64>()
+        .ok()
+        .filter(|&n| n > 0)
 }
 
 fn build_client() -> Result<reqwest::Client> {
@@ -86,14 +92,17 @@ fn build_client() -> Result<reqwest::Client> {
         .context("build reqwest client")
 }
 
-async fn download_one(
-    app: &AppHandle,
+async fn download_one<F>(
     url: String,
     dest: PathBuf,
     file_label: String,
     expected_sha256: Option<&'static str>,
+    mut emit_progress: F,
     cancel: &AtomicBool,
-) -> Result<()> {
+) -> Result<()>
+where
+    F: FnMut(DownloadProgress),
+{
     if let Some(parent) = dest.parent() {
         tokio::fs::create_dir_all(parent)
             .await
@@ -110,17 +119,14 @@ async fn download_one(
                 Ok(_) => {
                     let meta = tokio::fs::metadata(&dest).await.ok();
                     let total = meta.map(|m| m.len());
-                    let _ = app.emit(
-                        "download-progress",
-                        DownloadProgress {
-                            file: file_label.clone(),
-                            downloaded: total.unwrap_or(0),
-                            total,
-                            percent: Some(100.0),
-                            done: true,
-                            error: None,
-                        },
-                    );
+                    emit_progress(DownloadProgress {
+                        file: file_label.clone(),
+                        downloaded: total.unwrap_or(0),
+                        total,
+                        percent: Some(100.0),
+                        done: true,
+                        error: None,
+                    });
                     return Ok(());
                 }
                 Err(e) => {
@@ -139,17 +145,14 @@ async fn download_one(
                 .unwrap_or(0);
             match remote_content_length(&client, &url).await {
                 Some(remote_len) if remote_len == local_len => {
-                    let _ = app.emit(
-                        "download-progress",
-                        DownloadProgress {
-                            file: file_label.clone(),
-                            downloaded: local_len,
-                            total: Some(remote_len),
-                            percent: Some(100.0),
-                            done: true,
-                            error: None,
-                        },
-                    );
+                    emit_progress(DownloadProgress {
+                        file: file_label.clone(),
+                        downloaded: local_len,
+                        total: Some(remote_len),
+                        percent: Some(100.0),
+                        done: true,
+                        error: None,
+                    });
                     return Ok(());
                 }
                 remote_len => {
@@ -204,17 +207,14 @@ async fn download_one(
 
                 if last_emit.elapsed().as_millis() > 100 {
                     let percent = total.map(|t| (downloaded as f64 / t as f64) * 100.0);
-                    let _ = app.emit(
-                        "download-progress",
-                        DownloadProgress {
-                            file: file_label.clone(),
-                            downloaded,
-                            total,
-                            percent,
-                            done: false,
-                            error: None,
-                        },
-                    );
+                    emit_progress(DownloadProgress {
+                        file: file_label.clone(),
+                        downloaded,
+                        total,
+                        percent,
+                        done: false,
+                        error: None,
+                    });
                     last_emit = std::time::Instant::now();
                 }
             }
@@ -230,17 +230,14 @@ async fn download_one(
                 .await
                 .with_context(|| format!("rename {:?} -> {:?}", part, dest))?;
 
-            let _ = app.emit(
-                "download-progress",
-                DownloadProgress {
-                    file: file_label.clone(),
-                    downloaded,
-                    total,
-                    percent: Some(100.0),
-                    done: true,
-                    error: None,
-                },
-            );
+            emit_progress(DownloadProgress {
+                file: file_label.clone(),
+                downloaded,
+                total,
+                percent: Some(100.0),
+                done: true,
+                error: None,
+            });
             Ok::<(), anyhow::Error>(())
         }
         .await;
@@ -308,12 +305,15 @@ pub async fn download_model(
             },
         );
 
+        let progress_app = app.clone();
         match download_one(
-            &app,
             url.clone(),
             dest.clone(),
             label.clone(),
             spec.expected_sha256,
+            move |progress| {
+                let _ = progress_app.emit("download-progress", progress);
+            },
             cancel,
         )
         .await
@@ -352,6 +352,217 @@ pub fn is_variant_ready(model_dir: &Path, variant: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    async fn scripted_server(
+        responses: Vec<(u16, &'static [u8])>,
+    ) -> (String, tokio::task::JoinHandle<()>) {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            for (status, body) in responses {
+                let (mut stream, _) = listener.accept().await.unwrap();
+                let mut request = vec![0; 2048];
+                let _ = stream.read(&mut request).await.unwrap();
+                let reason = if status == 200 { "OK" } else { "Error" };
+                let headers = format!(
+                    "HTTP/1.1 {status} {reason}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    body.len()
+                );
+                stream.write_all(headers.as_bytes()).await.unwrap();
+                stream.write_all(body).await.unwrap();
+            }
+        });
+        (format!("http://{address}/model.onnx"), server)
+    }
+
+    #[tokio::test]
+    async fn download_retries_transient_server_error_and_publishes_complete_file() {
+        let (url, server) = scripted_server(vec![(500, b"retry"), (200, b"model-bytes")]).await;
+        let dir = tempfile::tempdir().unwrap();
+        let destination = dir.path().join("model.onnx");
+        let cancel = AtomicBool::new(false);
+        let mut progress = Vec::new();
+
+        download_one(
+            url,
+            destination.clone(),
+            "model.onnx".into(),
+            None,
+            |event| progress.push(event),
+            &cancel,
+        )
+        .await
+        .unwrap();
+        server.await.unwrap();
+
+        assert_eq!(tokio::fs::read(&destination).await.unwrap(), b"model-bytes");
+        assert!(!part_path(&destination).exists());
+        assert!(progress
+            .iter()
+            .any(|event| event.done && event.percent == Some(100.0)));
+    }
+
+    #[tokio::test]
+    async fn download_does_not_retry_not_found_or_leave_partial_files() {
+        let (url, server) = scripted_server(vec![(404, b"not found")]).await;
+        let dir = tempfile::tempdir().unwrap();
+        let destination = dir.path().join("missing.onnx");
+        let cancel = AtomicBool::new(false);
+        let mut progress = Vec::new();
+
+        assert!(download_one(
+            url,
+            destination.clone(),
+            "missing.onnx".into(),
+            None,
+            |event| progress.push(event),
+            &cancel,
+        )
+        .await
+        .is_err());
+        server.await.unwrap();
+        assert!(!destination.exists());
+        assert!(!part_path(&destination).exists());
+        assert!(progress.is_empty());
+    }
+
+    #[tokio::test]
+    async fn download_does_not_retry_unauthorized_responses() {
+        for status in [401, 403] {
+            let (url, server) = scripted_server(vec![
+                (status, b"unauthorized"),
+                (200, b"should-not-download"),
+            ])
+            .await;
+            let dir = tempfile::tempdir().unwrap();
+            let destination = dir.path().join(format!("unauthorized-{status}.onnx"));
+            let cancel = AtomicBool::new(false);
+            let mut progress = Vec::new();
+
+            let result = download_one(
+                url,
+                destination.clone(),
+                format!("unauthorized-{status}.onnx"),
+                None,
+                |event| progress.push(event),
+                &cancel,
+            )
+            .await;
+            server.abort();
+            let _ = server.await;
+
+            assert!(result.is_err(), "HTTP {status} must not be retried");
+            assert!(!destination.exists());
+            assert!(!part_path(&destination).exists());
+            assert!(progress.is_empty());
+        }
+    }
+
+    #[tokio::test]
+    async fn download_cancellation_removes_partial_file_without_retry() {
+        let (url, server) = scripted_server(vec![(200, b"model-bytes")]).await;
+        let dir = tempfile::tempdir().unwrap();
+        let destination = dir.path().join("cancelled.onnx");
+        let cancel = AtomicBool::new(true);
+        let mut progress = Vec::new();
+
+        assert!(download_one(
+            url,
+            destination.clone(),
+            "cancelled.onnx".into(),
+            None,
+            |event| progress.push(event),
+            &cancel,
+        )
+        .await
+        .is_err());
+        server.await.unwrap();
+        assert!(!destination.exists());
+        assert!(!part_path(&destination).exists());
+        assert!(progress.is_empty());
+    }
+
+    #[tokio::test]
+    async fn download_stops_after_retry_limit_and_removes_partial_files() {
+        let (url, server) = scripted_server(vec![
+            (500, b"temporary failure"),
+            (500, b"temporary failure"),
+            (500, b"temporary failure"),
+        ])
+        .await;
+        let dir = tempfile::tempdir().unwrap();
+        let destination = dir.path().join("exhausted.onnx");
+        let cancel = AtomicBool::new(false);
+        let mut progress = Vec::new();
+
+        assert!(download_one(
+            url,
+            destination.clone(),
+            "exhausted.onnx".into(),
+            None,
+            |event| progress.push(event),
+            &cancel,
+        )
+        .await
+        .is_err());
+        server.await.unwrap();
+        assert!(!destination.exists());
+        assert!(!part_path(&destination).exists());
+        assert!(!progress.iter().any(|event| event.done));
+    }
+
+    #[tokio::test]
+    async fn existing_file_with_matching_remote_size_is_kept() {
+        let (url, server) = scripted_server(vec![(200, b"model-bytes")]).await;
+        let dir = tempfile::tempdir().unwrap();
+        let destination = dir.path().join("existing.onnx");
+        tokio::fs::write(&destination, b"model-bytes")
+            .await
+            .unwrap();
+        let cancel = AtomicBool::new(false);
+        let mut progress = Vec::new();
+
+        download_one(
+            url,
+            destination.clone(),
+            "existing.onnx".into(),
+            None,
+            |event| progress.push(event),
+            &cancel,
+        )
+        .await
+        .unwrap();
+        server.await.unwrap();
+
+        assert_eq!(tokio::fs::read(destination).await.unwrap(), b"model-bytes");
+        assert_eq!(progress.len(), 1);
+        assert!(progress[0].done);
+        assert_eq!(progress[0].percent, Some(100.0));
+    }
+
+    #[tokio::test]
+    async fn checksum_mismatch_never_publishes_the_model_file() {
+        let (url, server) = scripted_server(vec![(200, b"model-bytes")]).await;
+        let dir = tempfile::tempdir().unwrap();
+        let destination = dir.path().join("bad-hash.onnx");
+        let cancel = AtomicBool::new(false);
+        let mut progress = Vec::new();
+
+        assert!(download_one(
+            url,
+            destination.clone(),
+            "bad-hash.onnx".into(),
+            Some("0000000000000000000000000000000000000000000000000000000000000000"),
+            |event| progress.push(event),
+            &cancel,
+        )
+        .await
+        .is_err());
+        server.await.unwrap();
+        assert!(!destination.exists());
+        assert!(!part_path(&destination).exists());
+        assert!(!progress.iter().any(|event| event.done));
+    }
 
     #[test]
     fn every_catalog_variant_resolves_to_a_repo_url() {
