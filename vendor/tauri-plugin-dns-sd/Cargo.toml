@@ -9,6 +9,7 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/momics/dns-sd"
 exclude = ["/examples", "/dist-js", "/guest-js", "/node_modules"]
 links = "tauri-plugin-dns-sd"
+build = "build.rs"
 
 [dependencies]
 tauri = { version = "2.8.5", default-features = false }
