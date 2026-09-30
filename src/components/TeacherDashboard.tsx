@@ -110,6 +110,8 @@ function ChatView({
 
 export function TeacherDashboard() {
   const contentRef = useRef<HTMLDivElement>(null);
+  const refreshGeneration = useRef(0);
+  const mounted = useRef(false);
   const [tab, setTab] = useState<TeacherTab>("dashboard");
   const [chatVisited, setChatVisited] = useState(false);
   const [sessionCode, setSessionCode] = useState<string | null>(null);
@@ -124,13 +126,15 @@ export function TeacherDashboard() {
   const lessonPlan = useLessonPlan(summary, activeQuiz, tab === "lesson");
 
   const refreshSummary = useCallback(async () => {
+    const generation = ++refreshGeneration.current;
     try {
       const s = await invoke<ClassSummary>("get_class_summary");
-      setSummary(s);
       const session = await invoke<{
         quiz: Quiz | null;
         joinCode: string | null;
       }>("get_teacher_session");
+      if (!mounted.current || generation !== refreshGeneration.current) return;
+      setSummary(s);
       setActiveQuiz(session.quiz);
       setSessionCode(session.joinCode);
     } catch (e) {
@@ -139,18 +143,19 @@ export function TeacherDashboard() {
   }, []);
 
   useEffect(() => {
-    let mounted = true;
+    mounted.current = true;
 
     refreshSummary();
 
     const unlisten = listen<AnalysisEvent>("analysis-event", (event) => {
-      if (!mounted) return;
+      if (!mounted.current) return;
       setEvents((prev) => [...prev, event.payload]);
       void refreshSummary();
     });
 
     return () => {
-      mounted = false;
+      mounted.current = false;
+      refreshGeneration.current += 1;
       void unlisten.then((u) => u());
     };
   }, [refreshSummary]);

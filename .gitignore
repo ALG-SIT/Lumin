@@ -16,6 +16,7 @@ target/
 
 # Build output
 dist/
+logs/
 
 # Models (large files)
 models/

@@ -209,6 +209,30 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn corrupt_history_returns_error_without_changing_source_file() {
+        let dir = tempdir().unwrap();
+        let persistence = Persistence::new(dir.path().into());
+        let path = dir.path().join("session-history.json");
+        let corrupt = b"{broken json";
+        fs::write(&path, corrupt).await.unwrap();
+
+        assert!(persistence.load_history().await.is_err());
+        assert_eq!(fs::read(path).await.unwrap(), corrupt);
+    }
+
+    #[tokio::test]
+    async fn persistence_returns_read_and_write_errors_instead_of_succeeding() {
+        let dir = tempdir().unwrap();
+        let blocker = dir.path().join("not-a-directory");
+        fs::write(&blocker, b"keep this file").await.unwrap();
+        let persistence = Persistence::new(blocker.clone());
+
+        assert!(persistence.load_history().await.is_err());
+        assert!(persistence.save_pending(&[]).await.is_err());
+        assert_eq!(fs::read(blocker).await.unwrap(), b"keep this file");
+    }
+
+    #[tokio::test]
     async fn test_history_append_and_retrieve() {
         let tmp = tempdir().unwrap();
         let p = Persistence::new(tmp.path().into());

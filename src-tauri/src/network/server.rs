@@ -621,6 +621,245 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn full_router_enforces_route_auth_and_deduplicates_analysis_events() {
+        let state = test_state();
+        let session_id = *state.active_session.read().await;
+        let app = build_router(state.clone());
+        let health = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/health")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(health.status(), StatusCode::OK);
+
+        let no_teacher_token = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/students")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(no_teacher_token.status(), StatusCode::UNAUTHORIZED);
+
+        let no_join_code = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/session/resolve")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(no_join_code.status(), StatusCode::UNAUTHORIZED);
+
+        let wrong_join_code = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/session/resolve")
+                    .header("X-Lumin-Join-Code", "9999")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(wrong_join_code.status(), StatusCode::UNAUTHORIZED);
+
+        let wrong_session = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/students/join")
+                    .header("X-Lumin-Join-Code", "1234")
+                    .header("X-Lumin-Session-ID", Uuid::new_v4().to_string())
+                    .header("content-type", "application/json")
+                    .body(Body::from("{}"))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(wrong_session.status(), StatusCode::FORBIDDEN);
+
+        state.students.write().await.push(StudentInfo {
+            participant_token: "participant-1".into(),
+            connected_at: Utc::now(),
+        });
+        let event = AnalysisEvent {
+            id: Uuid::new_v4(),
+            participant_token: "participant-1".into(),
+            session_id,
+            question_id: "q1".into(),
+            concept: "fractions".into(),
+            misconception: None,
+            correct: true,
+            hint_count: 0,
+            retry_success: false,
+            submitted_at: Utc::now(),
+        };
+        let request = || {
+            Request::builder()
+                .method("POST")
+                .uri("/analysis")
+                .header("X-Lumin-Join-Code", "1234")
+                .header("X-Lumin-Session-ID", session_id.unwrap().to_string())
+                .header("content-type", "application/json")
+                .body(Body::from(serde_json::to_string(&event).unwrap()))
+                .unwrap()
+        };
+        let (first, second) = tokio::join!(
+            app.clone().oneshot(request()),
+            app.clone().oneshot(request()),
+        );
+        for response in [first.unwrap(), second.unwrap()] {
+            assert_eq!(response.status(), StatusCode::OK);
+            let ack: AnalysisEventAck = axum::body::to_bytes(response.into_body(), usize::MAX)
+                .await
+                .map(|bytes| serde_json::from_slice(&bytes).unwrap())
+                .unwrap();
+            assert_eq!(ack.event_id, event.id);
+        }
+        assert_eq!(state.analysis_events.lock().await.len(), 1);
+
+        let mut distinct_event = event.clone();
+        distinct_event.id = Uuid::new_v4();
+        let distinct_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/analysis")
+                    .header("X-Lumin-Join-Code", "1234")
+                    .header("X-Lumin-Session-ID", session_id.unwrap().to_string())
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_string(&distinct_event).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(distinct_response.status(), StatusCode::OK);
+        assert_eq!(state.analysis_events.lock().await.len(), 2);
+
+        let mut unregistered_event = event.clone();
+        unregistered_event.id = Uuid::new_v4();
+        unregistered_event.participant_token = "unregistered-participant".into();
+        let unregistered_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/analysis")
+                    .header("X-Lumin-Join-Code", "1234")
+                    .header("X-Lumin-Session-ID", session_id.unwrap().to_string())
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_string(&unregistered_event).unwrap(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(unregistered_response.status(), StatusCode::FORBIDDEN);
+        assert_eq!(state.analysis_events.lock().await.len(), 2);
+
+        let regenerated_code = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/code")
+                    .header("X-Lumin-Teacher-Token", "test-token")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(regenerated_code.status(), StatusCode::OK);
+        let new_code: serde_json::Value =
+            axum::body::to_bytes(regenerated_code.into_body(), usize::MAX)
+                .await
+                .map(|bytes| serde_json::from_slice(&bytes).unwrap())
+                .unwrap();
+        let new_code = new_code["join_code"].as_str().unwrap();
+        assert_ne!(new_code, "1234");
+
+        let old_code_resolve = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/session/resolve")
+                    .header("X-Lumin-Join-Code", "1234")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(old_code_resolve.status(), StatusCode::UNAUTHORIZED);
+        let current_code_resolve = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/session/resolve")
+                    .header("X-Lumin-Join-Code", new_code)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(current_code_resolve.status(), StatusCode::OK);
+
+        let ended = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri("/session")
+                    .header("X-Lumin-Teacher-Token", "test-token")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::json!({ "sessionId": session_id.unwrap() }).to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(ended.status(), StatusCode::OK);
+        let ended_session_resolve = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/session/resolve")
+                    .header("X-Lumin-Join-Code", new_code)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(ended_session_resolve.status(), StatusCode::GONE);
+
+        let wrong_teacher_token = app
+            .oneshot(
+                Request::builder()
+                    .uri("/students")
+                    .header("X-Lumin-Teacher-Token", "wrong")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(wrong_teacher_token.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
     async fn test_broadcast_session_updates_server_state() {
         let state = test_state();
         let new_session_id = Uuid::new_v4();

@@ -13,11 +13,16 @@ import { ModelManager } from "../ModelManager";
 import { modelCard } from "../ModelManager.css.ts";
 
 const invokeMock = vi.fn();
+const eventMocks = vi.hoisted(() => ({
+  handlers: {} as Record<string, (event: { payload: unknown }) => void>,
+  listen: vi.fn(),
+}));
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...args: unknown[]) => invokeMock(...args),
 }));
 vi.mock("@tauri-apps/api/event", () => ({
-  listen: vi.fn().mockResolvedValue(() => {}),
+  listen: (name: string, callback: (event: { payload: unknown }) => void) =>
+    eventMocks.listen(name, callback),
 }));
 vi.mock("@tauri-apps/plugin-dialog", () => ({
   open: vi.fn(),
@@ -72,6 +77,14 @@ function cardFor(name: string): HTMLElement {
 
 beforeEach(() => {
   invokeMock.mockReset();
+  eventMocks.listen.mockReset();
+  eventMocks.handlers = {};
+  eventMocks.listen.mockImplementation(
+    (name: string, callback: (event: { payload: unknown }) => void) => {
+      eventMocks.handlers[name] = callback;
+      return Promise.resolve(vi.fn());
+    },
+  );
   invokeMock.mockImplementation((cmd: string) => {
     if (cmd === "list_models") return Promise.resolve(MODELS_FIXTURE);
     return Promise.resolve(undefined);
@@ -81,6 +94,45 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("ModelManager", () => {
+  it("shows download progress events and refreshes the model list on completion", async () => {
+    let finishDownload: (() => void) | undefined;
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === "list_models") return Promise.resolve(MODELS_FIXTURE);
+      if (cmd === "download_model")
+        return new Promise<void>((resolve) => {
+          finishDownload = resolve;
+        });
+      return Promise.resolve(undefined);
+    });
+    render(<ModelManager />);
+    await screen.findByText("Gemma 4 E4B INT4");
+    fireEvent.click(
+      within(cardFor("Gemma 4 E4B INT4")).getByText("ダウンロード"),
+    );
+    await waitFor(() =>
+      expect(eventMocks.handlers["download-progress"]).toBeDefined(),
+    );
+
+    eventMocks.handlers["download-progress"]({
+      payload: {
+        file: "decoder.onnx",
+        downloaded: 50,
+        total: 100,
+        percent: 50,
+        done: false,
+      },
+    });
+    expect(await screen.findByText("50%")).toBeDefined();
+
+    eventMocks.handlers["download-complete"]({ payload: {} });
+    await waitFor(() => {
+      expect(
+        invokeMock.mock.calls.filter(([cmd]) => cmd === "list_models"),
+      ).toHaveLength(2);
+    });
+    finishDownload?.();
+  });
+
   it("offers both Gemma 4 options under one family heading", async () => {
     render(<ModelManager />);
 

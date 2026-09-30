@@ -31,6 +31,8 @@ jobs:
         run: bun install --frozen-lockfile
       - name: Build (tsc + vite)
         run: bun run build
+      - name: Frontend tests
+        run: bun run test:run
 
   rust:
     name: rust (${{ matrix.os }})
@@ -83,6 +85,37 @@ jobs:
       - name: cargo test (non-Windows)
         if: runner.os != 'Windows'
         run: cargo test --manifest-path src-tauri/Cargo.toml
+
+  tauri-e2e:
+    name: Tauri desktop smoke test (Linux)
+    runs-on: ubuntu-latest
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/src-tauri/target
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install Tauri and WebDriver dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf webkit2gtk-driver xvfb
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Build desktop app
+        run: bun run tauri build --debug --no-bundle
+      - name: Run desktop smoke test
+        run: xvfb-run bun run test:e2e
+      - name: Upload WebDriver logs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: tauri-e2e-logs
+          path: logs/
+          if-no-files-found: ignore
+          retention-days: 7
 
   tauri:
     name: tauri build (${{ matrix.os }})

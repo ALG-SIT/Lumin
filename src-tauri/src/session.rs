@@ -22,6 +22,21 @@ fn classroom_instance_name(session_id: &Uuid) -> String {
     format!("Lumin教室 {}", hex[..6].to_uppercase())
 }
 
+fn validate_student_join_payload(body: &mut serde_json::Value) -> Result<String, String> {
+    let obj = body
+        .as_object_mut()
+        .ok_or_else(|| "参加情報が不正です".to_string())?;
+    let token = obj
+        .get("participantToken")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| "参加情報が不正です".to_string())?
+        .to_owned();
+    if obj.get("quiz").is_none_or(|q| q.is_null()) {
+        return Err("小テストが配信されていません".into());
+    }
+    Ok(token)
+}
+
 #[derive(Clone, serde::Serialize)]
 pub struct StudentSummary {
     pub id: String,
@@ -192,24 +207,19 @@ pub async fn student_join(
                 .json()
                 .await
                 .map_err(|e| format!("応答の解析に失敗: {e}"))?;
-            if let Some(obj) = body.as_object_mut() {
-                obj.insert("host".into(), serde_json::Value::String(host));
-                obj.insert("port".into(), serde_json::Value::from(port));
-                let token = obj
-                    .get("participantToken")
-                    .and_then(|v| v.as_str())
-                    .ok_or("参加情報が不正です")?
-                    .to_owned();
-                if obj.get("quiz").is_none_or(|q| q.is_null()) {
-                    return Err("小テストが配信されていません".into());
-                }
-                _manager.lock().await.student_connection = Some(StudentConnection {
-                    base,
-                    session_id: Uuid::parse_str(&session_id).map_err(|e| e.to_string())?,
-                    join_code,
-                    participant_token: token,
-                });
-            }
+            let token = validate_student_join_payload(&mut body)?;
+            let session_id = Uuid::parse_str(&session_id).map_err(|e| e.to_string())?;
+            let obj = body
+                .as_object_mut()
+                .ok_or_else(|| "参加情報が不正です".to_string())?;
+            obj.insert("host".into(), serde_json::Value::String(host));
+            obj.insert("port".into(), serde_json::Value::from(port));
+            _manager.lock().await.student_connection = Some(StudentConnection {
+                base,
+                session_id,
+                join_code,
+                participant_token: token,
+            });
             Ok(body)
         }
         StatusCode::UNAUTHORIZED => Err("参加コードが正しくありません".into()),
@@ -259,7 +269,7 @@ pub async fn start_session(
         .await
         .map_err(|e| format!("サーバーの起動に失敗しました: {e}"))?;
 
-    let advertise_handle = advertise_teacher(
+    let advertise_handle = match advertise_teacher(
         &app,
         SESSION_PORT,
         &classroom_instance_name(&session_id),
@@ -267,7 +277,14 @@ pub async fn start_session(
         true,
     )
     .await
-    .map_err(|e| format!("教室の通知に失敗しました: {e}"))?;
+    {
+        Ok(advertisement) => advertisement,
+        Err(error) => {
+            let _ = shutdown_tx.send(true);
+            let _ = handle.await;
+            return Err(format!("教室の通知に失敗しました: {error}"));
+        }
+    };
 
     inference.events.lock().await.clear();
     *inference.active_quiz.lock().await = Some(quiz.clone());
@@ -286,6 +303,7 @@ pub async fn start_session(
 pub async fn end_session(
     app: AppHandle,
     state: State<'_, Mutex<SessionManager>>,
+    inference: State<'_, AppState>,
 ) -> Result<(), String> {
     let mut manager = state.lock().await;
 
@@ -305,6 +323,7 @@ pub async fn end_session(
     manager.active_quiz = None;
     manager.session_id = None;
     manager.join_code = None;
+    *inference.active_quiz.lock().await = None;
 
     Ok(())
 }
@@ -363,6 +382,8 @@ pub async fn get_last_adopted_lesson_plan(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::Utc;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     #[test]
     fn classroom_instance_name_hides_join_code_and_is_unique() {
@@ -375,5 +396,73 @@ mod tests {
         assert_eq!(frag.len(), 6);
         assert!(frag.chars().all(|c| c.is_ascii_hexdigit()));
         assert_ne!(frag, &name_b["Lumin教室 ".len()..]);
+    }
+
+    #[test]
+    fn student_join_payload_requires_object_token_and_quiz() {
+        for invalid in [serde_json::Value::Null, serde_json::json!("unexpected")] {
+            assert!(validate_student_join_payload(&mut invalid.clone()).is_err());
+        }
+        assert!(validate_student_join_payload(&mut serde_json::json!({
+            "quiz": {"id": "q"}
+        }))
+        .is_err());
+        assert!(validate_student_join_payload(&mut serde_json::json!({
+            "participantToken": "participant-1",
+            "quiz": null
+        }))
+        .is_err());
+
+        let mut valid = serde_json::json!({
+            "participantToken": "participant-1",
+            "quiz": {"id": "quiz-1"}
+        });
+        assert_eq!(
+            validate_student_join_payload(&mut valid).unwrap(),
+            "participant-1"
+        );
+    }
+
+    #[tokio::test]
+    async fn student_result_submission_surfaces_forbidden_and_server_errors() {
+        for (status, reason) in [(403, "Forbidden"), (500, "Internal Server Error")] {
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let address = listener.local_addr().unwrap();
+            let server = tokio::spawn(async move {
+                let (mut stream, _) = listener.accept().await.unwrap();
+                let mut request = vec![0; 4096];
+                let _ = stream.read(&mut request).await.unwrap();
+                let response = format!(
+                    "HTTP/1.1 {status} {reason}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                );
+                stream.write_all(response.as_bytes()).await.unwrap();
+            });
+            let manager = SessionManager {
+                student_connection: Some(StudentConnection {
+                    base: format!("http://{address}"),
+                    session_id: Uuid::new_v4(),
+                    join_code: "1234".into(),
+                    participant_token: "participant-1".into(),
+                }),
+                ..SessionManager::new()
+            };
+            let event = AnalysisEvent {
+                id: Uuid::new_v4(),
+                participant_token: String::new(),
+                session_id: None,
+                question_id: "q1".into(),
+                concept: "linear-functions".into(),
+                misconception: None,
+                correct: true,
+                hint_count: 0,
+                retry_success: false,
+                submitted_at: Utc::now(),
+            };
+
+            let error = manager.send_student_analysis(event).await.unwrap_err();
+            server.await.unwrap();
+            assert!(error.contains(&status.to_string()), "{error}");
+            assert!(error.contains("結果を送信できませんでした"));
+        }
     }
 }
