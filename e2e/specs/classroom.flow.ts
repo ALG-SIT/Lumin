@@ -9,9 +9,12 @@ describe("Tauri teacher and student classroom flow", () => {
     await teacher.$("button[aria-label='先生として始める画面を開く']").click();
     await expect(teacher.$("[aria-label='先生ダッシュボード']")).toExist();
     await teacher.$("button=セッション").click();
-    await teacher
-      .$("//button[contains(normalize-space(.), '一次関数 3分デモ')]")
-      .click();
+    await expect(teacher.$("section[aria-label='小テスト配信']")).toExist();
+    const demoQuiz = teacher.$(
+      "//button[contains(normalize-space(.), '一次関数 3分デモ')]",
+    );
+    await expect(demoQuiz).toExist();
+    await demoQuiz.click();
     await teacher.$("button=この小テストを配信").click();
     const joinCode = teacher.$("[aria-live='polite']");
     await expect(joinCode).toHaveText(/[0-9]{4}/);
