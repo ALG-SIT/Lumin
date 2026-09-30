@@ -61,7 +61,7 @@ jobs:
           workspaces: src-tauri -> target
       # `runtime/` is a Tauri bundle resource. Generate the platform-specific
       # ONNX Runtime libraries before Cargo runs Tauri's build script.
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Stage ONNX runtime
@@ -127,7 +127,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri -> target
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Build Tauri app bundle
