@@ -6,8 +6,10 @@
 //! Students must include this code in the `X-Lumin-Join-Code` header
 //! on every classroom request. Missing or incorrect codes receive 401.
 
+#[cfg(test)]
 use std::sync::Arc;
 
+#[cfg(test)]
 use axum::{
     body::Body,
     extract::{Request, State},
@@ -56,6 +58,7 @@ pub fn generate_join_code() -> String {
 ///
 /// Returns `401 UNAUTHORIZED` if the header is missing, malformed, or incorrect.
 /// Returns `401` if no code has been generated yet (teacher hasn't started).
+#[cfg(test)]
 pub async fn join_code_middleware(
     State(state): State<Arc<JoinCodeState>>,
     req: Request<Body>,

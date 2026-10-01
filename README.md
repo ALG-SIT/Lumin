@@ -4,7 +4,7 @@
 
 Lumin は、生徒の解答を端末内で分析して段階的なヒントを返し、解答本文を送らずにクラス全体の誤概念を教師へ共有する、ローカルファースト型の学習支援アプリです。
 
-このリポジトリは `doc/AI_Innovators_Cup_Lumin_構想.md` に基づく大会用 MVP です。Tauri 2 + Rust + React（Bun / Vite）で作られており、1 つのアプリを教師モード・生徒モードに切り替えて利用します。同じローカルネットワーク上の端末同士が DNS-SD（mDNS）で互いを発見し、HTTP で教室セッションを構成します。
+このリポジトリは `doc/AI_Innovators_Cup_Lumin_構想.md` に基づく大会用 MVP です。Tauri 2 + Rust + React（Bun / Vite）で作られており、1 つのアプリを教師モード・生徒モードに切り替えて利用します。同じローカルネットワーク上の端末同士が DNS-SD（mDNS）で互いを発見し、Noise 暗号化 TCP で教室セッションを構成します。
 
 Tauri へのリライトは PR #1 で `main` にマージ済みで、`main` が現在の開発ベースです。
 
@@ -14,7 +14,7 @@ Tauri へのリライトは PR #1 で `main` にマージ済みで、`main` が�
 | --- | --- | --- |
 | Rust | Tauri 2 | デスクトップ / モバイル向け Rust バックエンド |
 | Rust | `serde`, `anyhow`, `thiserror`, `tokio` | IPC、エラー処理、非同期処理 |
-| Rust | `axum`, `tauri-plugin-dns-sd`, `local-ip-address` | 教室内 HTTP サーバーと mDNS 探索 |
+| Rust | `snow`, `tauri-plugin-dns-sd`, `local-ip-address` | 教室内 Noise 暗号化 TCP 通信と mDNS 探索 |
 | Rust | `ort` 2.0 (ONNX Runtime), `tokenizers`, `ndarray` | 端末内推論 |
 | Rust | `reqwest`, `sha2` | モデルのダウンロードと整合性検証 |
 | JS ランタイム | Bun | パッケージマネージャ兼実行環境 |
@@ -38,7 +38,9 @@ Tauri へのリライトは PR #1 で `main` にマージ済みで、`main` が�
 
 **教室内通信（`network`）**
 
-- 教師端末が `axum` の HTTP サーバーを起動し、生徒端末は `_lumin-class._tcp` を mDNS で発見して参加
+- 教師端末が TCP サーバーを起動し、生徒端末は `_lumin-class._tcp` を mDNS で発見して参加
+- 接続後に Noise XX の鍵交換を行い、教師と生徒の画面に表示された鍵確認文字列を照合してから参加コードを送信
+- 接続を維持して回答を暗号化送信し、切断時はアプリ起動中に再接続・未確認イベントの再送を行う
 - 4 桁の参加コードによる照合（コードは探索情報には載せない）
 - 授業 ID による別授業データの混入防止
 - 解答本文を含まない分析イベントのみの送信（`AnalysisEvent` は解答本文を保持できない型）
@@ -176,7 +178,7 @@ cargo test --manifest-path src-tauri/Cargo.toml   # Rust 単体テスト
 
 ## アーキテクチャの概要
 
-React フロントエンドは Tauri の `invoke` で Rust コマンドを呼び出し、ダウンロード進捗や教室の発見は Tauri イベントで受け取ります。Rust バックエンドは `lumin_core`（教材・分析・集計）、`inference` / `ai`（`ort` による Gemma 推論と安全ガード）、`network`（教室内 HTTP / mDNS 通信）、`persistence`（履歴・キュー）に分かれています。教師端末が HTTP サーバーを立てて `_lumin-class._tcp` を広告し、生徒端末は mDNS で教室を発見して参加コード付きで接続します。分析イベントは端末内で生成され、解答本文を含まずに教師端末へ送信されます。詳細は `docs/architecture/01-overview.md` を参照してください。
+React フロントエンドは Tauri の `invoke` で Rust コマンドを呼び出し、ダウンロード進捗や教室の発見は Tauri イベントで受け取ります。Rust バックエンドは `lumin_core`（教材・分析・集計）、`inference` / `ai`（`ort` による Gemma 推論と安全ガード）、`network`（Noise 暗号化 TCP / mDNS 通信）、`persistence`（履歴・キュー）に分かれています。教師端末が Noise 対応の TCP サーバーを立てて `_lumin-class._tcp` を広告し、生徒端末は mDNS で教室を発見して参加コード付きで接続します。分析イベントは端末内で生成され、解答本文を含まずに教師端末へ送信されます。詳細は `docs/architecture/01-overview.md` を参照してください。
 
 ## プライバシー境界
 
@@ -286,7 +288,7 @@ Gemma にはインターネット通信機能はなく、推論は端末の CPU 
 │   ├── styles/               # vanilla-extract のトークンと共有スタイル
 │   └── lib/tauri.ts          # Tauri ホスト内かどうかの実行時判定
 ├── src-tauri/
-│   ├── Cargo.toml            # Tauri、axum、ort、tokenizers など
+│   ├── Cargo.toml            # Tauri、snow、ort、tokenizers など
 │   ├── tauri.conf.json       # productName、identifier、CSP、bundle 設定
 │   ├── capabilities/default.json
 │   └── src/
@@ -294,7 +296,7 @@ Gemma にはインターネット通信機能はなく、推論は端末の CPU 
 │       ├── lumin_core/       # 教材・分析・集計・デモデータ
 │       ├── inference/        # ort セッション、生成、トークナイザ、DL、ベンチ
 │       ├── ai/               # 構造化出力スキーマと正答漏洩ガード
-│       ├── network/          # HTTP サーバー、DNS-SD、参加コード認証、再送
+│       ├── network/          # Noise TCP、DNS-SD、参加コード認証、再送
 │       ├── session.rs        # 教室セッションのコマンド
 │       └── persistence.rs    # 履歴・スナップショット・保留キュー
 ├── scripts/                  # モデルダウンロードスクリプト

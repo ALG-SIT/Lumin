@@ -71,18 +71,20 @@ export function TeacherSessionControl({
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [selectedQuiz, setSelectedQuiz] = useState<Quiz | null>(null);
   const [joinCode, setJoinCode] = useState<string | null>(null);
+  const [teacherFingerprint, setTeacherFingerprint] = useState<string | null>(null);
   const [students, setStudents] = useState<Student[]>([]);
   const [sessionActive, setSessionActive] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    invoke<{ quiz: Quiz | null; joinCode: string | null }>(
+    invoke<{ quiz: Quiz | null; joinCode: string | null; teacherFingerprint: string | null }>(
       "get_teacher_session",
     )
       .then((session) => {
         setSelectedQuiz(session.quiz);
         setJoinCode(session.joinCode);
+        setTeacherFingerprint(session.teacherFingerprint);
         setSessionActive(Boolean(session.joinCode));
       })
       .catch((e) => setError(String(e)));
@@ -116,6 +118,8 @@ export function TeacherSessionControl({
         quizId: selectedQuiz.id,
       });
       setJoinCode(code);
+      const session = await invoke<{ teacherFingerprint: string | null }>("get_teacher_session");
+      setTeacherFingerprint(session.teacherFingerprint);
       setSessionActive(true);
       onSessionStarted(code);
     } catch (e) {
@@ -132,6 +136,7 @@ export function TeacherSessionControl({
       onSessionEnded?.();
       setSessionActive(false);
       setJoinCode(null);
+      setTeacherFingerprint(null);
       setStudents([]);
     } catch (e) {
       setError(String(e));
@@ -261,6 +266,9 @@ export function TeacherSessionControl({
             <p className={joinCodeHint}>
               生徒は同じWi-Fiからこのコードを入力して参加します
             </p>
+            <span className={joinCodeLabel}>教師の確認文字列</span>
+            <code>{teacherFingerprint ?? "準備中"}</code>
+            <p className={joinCodeHint}>生徒の画面に表示される文字列と一致することを確認してください</p>
           </div>
 
           <div className={sessionCard}>

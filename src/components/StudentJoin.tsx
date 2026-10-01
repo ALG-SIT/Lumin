@@ -28,7 +28,14 @@ export interface DiscoveredTeacher {
   name: string;
   host: string;
   port: number;
-  session_uuid: string;
+  session_uuid: string | null;
+  compatible?: boolean;
+}
+
+interface PendingJoin {
+  teacher: DiscoveredTeacher;
+  pendingId: string;
+  teacherFingerprint: string;
 }
 
 export interface JoinResultPayload {
@@ -52,6 +59,7 @@ export function StudentJoin({ onJoined, onReset }: StudentJoinProps) {
   const [error, setError] = useState<string | null>(null);
 
   const [isJoining, setIsJoining] = useState(false);
+  const [pending, setPending] = useState<PendingJoin | null>(null);
   const joining = useRef(false);
 
   const searchTeachers = useCallback(() => {
@@ -73,23 +81,55 @@ export function StudentJoin({ onJoined, onReset }: StudentJoinProps) {
 
   const handleJoin = async (teacher: DiscoveredTeacher) => {
     if (joining.current) return;
+    if (teacher.compatible === false) {
+      setError("この教室は旧版です。教師端末のアプリを更新してください。");
+      return;
+    }
     joining.current = true;
     setIsJoining(true);
     setError(null);
     try {
-      const res = await invoke<JoinResultPayload>("student_join", {
+      if (pending) await invoke("student_cancel_connection");
+      const prepared = await invoke<{ pendingId: string; teacherFingerprint: string }>("student_prepare_connection", {
         host: teacher.host,
         port: teacher.port,
         sessionId: teacher.session_uuid,
-        joinCode,
       });
-      onJoined(res);
+      setPending({ teacher, ...prepared });
     } catch (e) {
       setError(String(e));
     } finally {
       joining.current = false;
       setIsJoining(false);
     }
+  };
+
+  const confirmJoin = async () => {
+    if (!pending || joinCode.length !== 4 || joining.current) return;
+    joining.current = true;
+    setIsJoining(true);
+    setError(null);
+    try {
+      const res = await invoke<JoinResultPayload>("student_join", {
+        pendingId: pending.pendingId,
+        teacherFingerprint: pending.teacherFingerprint,
+        joinCode,
+      });
+      setPending(null);
+      onJoined(res);
+    } catch (e) {
+      setError(String(e));
+      setPending(null);
+      await invoke("student_cancel_connection").catch(() => undefined);
+    } finally {
+      joining.current = false;
+      setIsJoining(false);
+    }
+  };
+
+  const cancelJoin = async () => {
+    await invoke("student_cancel_connection").catch(() => undefined);
+    setPending(null);
   };
 
   const validPort =
@@ -102,17 +142,22 @@ export function StudentJoin({ onJoined, onReset }: StudentJoinProps) {
       name: "",
       host: manualIp.trim(),
       port: Number(manualPort),
-      session_uuid: "",
+      session_uuid: null,
     });
   };
 
   const canJoin = joinCode.length === 4;
+  const handleReset = () => {
+    if (pending) void invoke("student_cancel_connection").catch(() => undefined);
+    setPending(null);
+    onReset();
+  };
 
   return (
     <div className={studentJoin}>
       <div className={joinHeader}>
         <h2 className={joinTitle}>教室に参加</h2>
-        <button className={joinReset} type="button" onClick={onReset}>
+        <button className={joinReset} type="button" onClick={handleReset}>
           役割を選び直す
         </button>
       </div>
@@ -147,7 +192,7 @@ export function StudentJoin({ onJoined, onReset }: StudentJoinProps) {
                   <div className={teacherInfo}>
                     <span className={teacherName}>{teacher.name}</span>
                     <span className={teacherMeta}>
-                      {teacher.host}:{teacher.port}
+                      {teacher.host}:{teacher.port}{teacher.compatible === false ? " · 更新が必要" : ""}
                     </span>
                   </div>
                   <input
@@ -167,10 +212,20 @@ export function StudentJoin({ onJoined, onReset }: StudentJoinProps) {
                     className={joinButton}
                     type="button"
                     onClick={() => handleJoin(teacher)}
-                    disabled={!canJoin || isJoining}
+                    disabled={!canJoin || isJoining || teacher.compatible === false}
                   >
                     {isJoining ? "参加中…" : "参加"}
                   </button>
+                  {pending?.teacher.session_uuid === teacher.session_uuid && (
+                    <div role="group" aria-label="教師の確認">
+                      <p>教師画面の確認文字列と一致することを確認してください。</p>
+                      <strong>{pending.teacherFingerprint}</strong>
+                      <button type="button" onClick={confirmJoin} disabled={!canJoin || isJoining}>
+                        一致を確認して参加
+                      </button>
+                      <button type="button" onClick={cancelJoin}>キャンセル</button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

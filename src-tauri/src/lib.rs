@@ -149,7 +149,8 @@ async fn send_analysis_event(
     manager: State<'_, tokio::sync::Mutex<session::SessionManager>>,
 ) -> Result<(), String> {
     let event: AnalysisEvent = serde_json::from_str(&event_json).map_err(|e| e.to_string())?;
-    manager.lock().await.send_student_analysis(event).await
+    let (connection, pending) = manager.lock().await.student_send_context()?;
+    session::send_queued_analysis(connection, pending, event).await
 }
 
 #[tauri::command]
@@ -443,6 +444,8 @@ pub fn run() {
             get_demo_quiz_summary,
             get_demo_lesson_plan,
             browse_teachers,
+            session::student_prepare_connection,
+            session::student_cancel_connection,
             session::student_join,
             session::save_lesson_plan,
             session::get_last_adopted_lesson_plan,

@@ -8,7 +8,7 @@
 //! # Service layout
 //!
 //! - **Service type:** `_lumin-class._tcp`
-//! - **TXT record keys:** `code_required` (bool flag), `version` (string)
+//! - **TXT record keys:** `code_required` (bool flag), `version` (string), `transport` (string)
 //! - **Port:** OS-assigned via the HTTP server (Todo 18); passed in at advertise time.
 
 use std::collections::HashMap;
@@ -30,7 +30,7 @@ const PROTOCOL: TransportProtocol = TransportProtocol::Tcp;
 
 /// Current service protocol version — embedded in TXT records so students can
 /// detect mismatched versions early.
-const PROTOCOL_VERSION: &str = "1.0";
+const PROTOCOL_VERSION: &str = "2";
 
 // ── Discovery result contract ────────────────────────────────────────────────
 
@@ -45,6 +45,7 @@ pub struct TeacherDiscovered {
     pub host: String,
     pub port: u16,
     pub session_uuid: Option<String>,
+    pub compatible: bool,
 }
 
 // ── Internal browse message types (mirrors the plugin's unexported enum) ─────
@@ -114,6 +115,10 @@ pub async fn advertise_teacher(
     txt.insert(
         "version".to_string(),
         TxtRecordValue::BinaryData(PROTOCOL_VERSION.as_bytes().to_vec()),
+    );
+    txt.insert(
+        "transport".to_string(),
+        TxtRecordValue::BinaryData(b"noise".to_vec()),
     );
 
     let options = AdvertiseOptions {
@@ -223,12 +228,20 @@ pub(crate) fn merge_records(records: Vec<BrowseServiceRecord>) -> Vec<BrowseServ
 }
 
 fn to_discovered(r: BrowseServiceRecord) -> Option<TeacherDiscovered> {
-    let session_uuid = r.txt.as_ref()?.get("session_uuid").map(decode_txt_value);
+    let txt = r.txt.as_ref()?;
+    let session_uuid = txt.get("session_uuid").map(decode_txt_value);
+    let compatible = txt
+        .get("version")
+        .is_some_and(|v| decode_txt_value(v) == "2")
+        && txt
+            .get("transport")
+            .is_some_and(|v| decode_txt_value(v) == "noise");
     Some(TeacherDiscovered {
         name: r.name,
         host: pick_connect_address(&r.host, &r.addresses),
         port: r.port?,
         session_uuid,
+        compatible,
     })
 }
 
