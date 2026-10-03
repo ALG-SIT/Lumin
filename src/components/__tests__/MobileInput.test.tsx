@@ -89,7 +89,9 @@ describe("mobile input flows", () => {
         .disabled,
     ).toBe(true);
     expect(
-      invoke.mock.calls.filter(([command]) => command === "student_join"),
+      invoke.mock.calls.filter(
+        ([command]) => command === "student_prepare_connection",
+      ),
     ).toHaveLength(1);
   });
 });

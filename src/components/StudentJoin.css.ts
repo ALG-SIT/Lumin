@@ -280,3 +280,81 @@ export const joinButton = style({
     },
   },
 });
+
+export const confirmCard = style({
+  gridColumn: "1 / -1",
+  display: "flex",
+  flexDirection: "column",
+  gap: "var(--space-3)",
+  padding: "var(--space-4)",
+  marginTop: "var(--space-2)",
+  background: "var(--lumin-card)",
+  border: "1px solid var(--lumin-border)",
+  borderRadius: "var(--radius-md)",
+});
+
+export const confirmPrompt = style({
+  margin: "0",
+  fontSize: "0.875rem",
+  color: "var(--lumin-ink)",
+});
+
+export const confirmFingerprint = style({
+  fontSize: "1.125rem",
+  fontWeight: "700",
+  letterSpacing: "0.05em",
+  color: "var(--lumin-indigo)",
+  fontFamily:
+    "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+  background: "var(--lumin-canvas)",
+  padding: "var(--space-2) var(--space-3)",
+  borderRadius: "var(--radius-sm)",
+  border: "1px solid var(--lumin-border)",
+  textAlign: "center",
+});
+
+export const confirmActions = style({
+  display: "flex",
+  gap: "var(--space-2)",
+  flexWrap: "wrap",
+});
+
+export const confirmButton = style({
+  padding: "var(--space-2) var(--space-4)",
+  fontSize: "0.875rem",
+  fontWeight: "600",
+  color: "#ffffff",
+  background: "var(--lumin-indigo)",
+  border: "none",
+  borderRadius: "var(--radius-md)",
+  cursor: "pointer",
+  transition: "background 0.2s ease, transform 0.2s ease",
+  ":disabled": {
+    opacity: "0.5",
+    cursor: "not-allowed",
+  },
+  selectors: {
+    "&:hover:not(:disabled)": {
+      background: "#4338ca",
+    },
+    "&:active:not(:disabled)": {
+      transform: "scale(0.98)",
+    },
+  },
+});
+
+export const cancelButton = style({
+  padding: "var(--space-2) var(--space-3)",
+  fontSize: "0.875rem",
+  color: "var(--lumin-text-secondary)",
+  background: "transparent",
+  border: "1px solid var(--lumin-border)",
+  borderRadius: "var(--radius-md)",
+  cursor: "pointer",
+  transition: "background 0.2s ease",
+  selectors: {
+    "&:hover": {
+      background: "var(--lumin-canvas)",
+    },
+  },
+});

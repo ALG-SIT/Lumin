@@ -1,8 +1,10 @@
 #![allow(dead_code)]
 
+#[cfg(test)]
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+#[cfg(test)]
 use axum::{
     body::Body,
     extract::{Request, State},
@@ -12,15 +14,19 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
+#[cfg(test)]
 use chrono::Utc;
+#[cfg(test)]
 use tauri::Emitter;
 use tokio::sync::{watch, Mutex, RwLock};
 use uuid::Uuid;
 
-use crate::lumin_core::models::{
-    AnalysisEvent, AnalysisEventAck, EndSession, Quiz, SessionBroadcast, StudentInfo, StudentList,
-};
-use crate::network::auth::{generate_join_code, JoinCodeState};
+use crate::lumin_core::models::{AnalysisEvent, Quiz, StudentInfo};
+#[cfg(test)]
+use crate::lumin_core::models::{AnalysisEventAck, EndSession, SessionBroadcast, StudentList};
+#[cfg(test)]
+use crate::network::auth::generate_join_code;
+use crate::network::auth::JoinCodeState;
 
 pub struct ServerState {
     pub session_id: Option<String>,
@@ -36,18 +42,21 @@ pub struct ServerState {
 // ── Handlers ─────────────────────────────────────────────────────────────────
 
 /// `GET /health` — returns 200 OK when the server is up. (Unauthenticated.)
+#[cfg(test)]
 async fn health() -> StatusCode {
     StatusCode::OK
 }
 
 /// `GET /session` — returns basic session metadata.
 /// Protected by join-code middleware.
+#[cfg(test)]
 async fn session_info(State(state): State<Arc<ServerState>>) -> Json<serde_json::Value> {
     Json(serde_json::json!({
         "session_id": state.session_id,
     }))
 }
 
+#[cfg(test)]
 async fn resolve_session(
     State(state): State<Arc<ServerState>>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
@@ -58,6 +67,7 @@ async fn resolve_session(
 
 /// `POST /code` — generate a new random 4-digit join code.
 /// Protected by `X-Lumin-Teacher-Token` header (teacher only).
+#[cfg(test)]
 async fn regenerate_code(
     State(state): State<Arc<ServerState>>,
     req: Request<Body>,
@@ -81,6 +91,7 @@ async fn regenerate_code(
 
 /// `GET /code` — return the current join code.
 /// Protected by `X-Lumin-Teacher-Token` header (teacher only).
+#[cfg(test)]
 async fn get_code(
     State(state): State<Arc<ServerState>>,
     req: Request<Body>,
@@ -101,6 +112,7 @@ async fn get_code(
 
 /// `POST /session` — broadcast session + quiz to students.
 /// Teacher-only: requires `X-Lumin-Teacher-Token` header.
+#[cfg(test)]
 async fn broadcast_session(
     State(state): State<Arc<ServerState>>,
     Json(payload): Json<SessionBroadcast>,
@@ -113,6 +125,7 @@ async fn broadcast_session(
 
 /// `POST /session/end` — teacher ends the session.
 /// Teacher-only: requires `X-Lumin-Teacher-Token` header.
+#[cfg(test)]
 async fn end_session(
     State(state): State<Arc<ServerState>>,
     Json(payload): Json<EndSession>,
@@ -130,6 +143,7 @@ async fn end_session(
 
 /// `POST /analysis` — student submits an analysis event.
 /// Returns event_id in response body.
+#[cfg(test)]
 async fn submit_analysis(
     State(state): State<Arc<ServerState>>,
     Json(event): Json<AnalysisEvent>,
@@ -159,6 +173,7 @@ async fn submit_analysis(
 
 /// `POST /analysis/ack` — teacher acknowledges an event.
 /// Teacher-only: requires `X-Lumin-Teacher-Token` header.
+#[cfg(test)]
 async fn ack_analysis(
     State(state): State<Arc<ServerState>>,
     Json(payload): Json<AnalysisEventAck>,
@@ -170,6 +185,7 @@ async fn ack_analysis(
 
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg(test)]
 struct StudentJoinBody {
     participant_token: Option<String>,
 }
@@ -177,6 +193,7 @@ struct StudentJoinBody {
 /// `POST /students/join` — register a student for the active session.
 ///
 /// Requires both the join code and the active session UUID.
+#[cfg(test)]
 async fn students_join(
     State(state): State<Arc<ServerState>>,
     axum::Json(body): axum::Json<StudentJoinBody>,
@@ -199,6 +216,7 @@ async fn students_join(
 
 /// `GET /students` — list connected students.
 /// Teacher-only: requires `X-Lumin-Teacher-Token` header.
+#[cfg(test)]
 async fn list_students(State(state): State<Arc<ServerState>>) -> Json<StudentList> {
     let students = state.students.read().await;
     Json(StudentList {
@@ -210,6 +228,7 @@ async fn list_students(State(state): State<Arc<ServerState>>) -> Json<StudentLis
 
 /// Middleware that validates the `X-Lumin-Teacher-Token` header on
 /// teacher-only management routes.
+#[cfg(test)]
 async fn teacher_token_middleware(
     State(state): State<Arc<ServerState>>,
     req: Request<Body>,
@@ -226,6 +245,7 @@ async fn teacher_token_middleware(
     }
 }
 
+#[cfg(test)]
 async fn session_uuid_middleware(
     State(state): State<Arc<ServerState>>,
     req: Request<Body>,
@@ -257,6 +277,7 @@ async fn session_uuid_middleware(
 ///
 /// Returns `(server_handle, teacher_token)` where `teacher_token` is an opaque
 /// string the local UI can use to call teacher-only endpoints.
+#[cfg(test)]
 pub async fn start_server(
     port: u16,
     session_id: String,
@@ -284,6 +305,7 @@ pub async fn start_server(
 }
 
 /// Build the full axum router from a shared [`ServerState`].
+#[cfg(test)]
 pub fn build_router(state: Arc<ServerState>) -> Router {
     // ── Public (unauthenticated) routes ──────────────────────────────────
     let public_routes = Router::new().route("/health", get(health));
@@ -331,6 +353,7 @@ pub fn build_router(state: Arc<ServerState>) -> Router {
 /// Start serving the provided router on all interfaces (`0.0.0.0`).
 ///
 /// Used by [`start_server`] and by callers that already own a [`ServerState`].
+#[cfg(test)]
 pub async fn start_server_with_router(
     port: u16,
     app: Router,
@@ -366,9 +389,8 @@ pub async fn start_server_with_state(
     port: u16,
     state: Arc<ServerState>,
     shutdown_rx: watch::Receiver<bool>,
-) -> Result<tokio::task::JoinHandle<()>, String> {
-    let app = build_router(state);
-    start_server_with_router(port, app, shutdown_rx).await
+) -> Result<(tokio::task::JoinHandle<()>, String), String> {
+    crate::network::noise::serve(port, state, shutdown_rx).await
 }
 
 /// Discover the active LAN interface IP (best-effort).

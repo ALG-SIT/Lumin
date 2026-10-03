@@ -24,7 +24,7 @@ serde_json = "1"
 anyhow = "1.0"
 thiserror = "2.0"
 tokio = { version = "1", features = ["full"] }
-axum = "0.8"
+snow = "0.10"
 local-ip-address = "0.6"
 uuid = { version = "1", features = ["serde", "v4"] }
 chrono = { version = "0.4", features = ["serde"] }
@@ -75,5 +75,6 @@ ort = { version = "2.0.0-rc.13", features = ["half", "coreml"] }
 ort = { version = "2.0.0-rc.13", features = ["half", "coreml", "download-binaries"] }
 
 [dev-dependencies]
+axum = "0.8"
 tower = { version = "0.5", features = ["util"] }
 tempfile = "3"
