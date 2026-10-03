@@ -211,7 +211,12 @@ export function StudentJoin({ onJoined, onReset }: StudentJoinProps) {
     <div className={studentJoin}>
       <div className={joinHeader}>
         <h2 className={joinTitle}>教室に参加</h2>
-        <button className={joinReset} type="button" onClick={handleReset}>
+        <button
+          className={joinReset}
+          type="button"
+          onClick={handleReset}
+          disabled={isJoining}
+        >
           役割を選び直す
         </button>
       </div>
