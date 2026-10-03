@@ -76,8 +76,8 @@ impl<S: AsyncRead + AsyncWrite + Unpin> Connection<S> {
             .map_err(err)?
             .build_initiator()
             .map_err(err)?;
-        let mut out = [0u8; MAX_RECORD];
-        let mut input = [0u8; MAX_RECORD];
+        let mut out = vec![0u8; MAX_RECORD];
+        let mut input = vec![0u8; MAX_RECORD];
         let n = noise.write_message(b"LUMIN\x02", &mut out).map_err(err)?;
         write_frame(&mut stream, &out[..n]).await?;
         let n = read_frame(&mut stream, &mut input).await?;
@@ -105,8 +105,8 @@ impl<S: AsyncRead + AsyncWrite + Unpin> Connection<S> {
             .map_err(err)?
             .build_responder()
             .map_err(err)?;
-        let mut input = [0u8; MAX_RECORD];
-        let mut out = [0u8; MAX_RECORD];
+        let mut input = vec![0u8; MAX_RECORD];
+        let mut out = vec![0u8; MAX_RECORD];
         let n = read_frame(&mut stream, &mut input).await?;
         let plain = noise.read_message(&input[..n], &mut out).map_err(err)?;
         if &out[..plain] != b"LUMIN\x02" {
@@ -139,13 +139,13 @@ impl<S: AsyncRead + AsyncWrite + Unpin> Connection<S> {
         let message_id = *Uuid::new_v4().as_bytes();
         let fragments = plain.chunks(FRAGMENT_SIZE).collect::<Vec<_>>();
         let count = u16::try_from(fragments.len()).map_err(err)?;
+        let mut out = vec![0u8; MAX_RECORD];
         for (index, fragment) in fragments.into_iter().enumerate() {
             let mut chunk = Vec::with_capacity(20 + fragment.len());
             chunk.extend_from_slice(&message_id);
             chunk.extend_from_slice(&count.to_be_bytes());
             chunk.extend_from_slice(&(index as u16).to_be_bytes());
             chunk.extend_from_slice(fragment);
-            let mut out = [0u8; MAX_RECORD];
             let n = self.cipher.write_message(&chunk, &mut out).map_err(err)?;
             write_frame(&mut self.stream, &out[..n]).await?;
         }
@@ -153,8 +153,8 @@ impl<S: AsyncRead + AsyncWrite + Unpin> Connection<S> {
     }
 
     pub async fn receive<T: for<'de> Deserialize<'de>>(&mut self) -> Result<T, String> {
-        let mut input = [0u8; MAX_RECORD];
-        let mut out = [0u8; MAX_RECORD];
+        let mut input = vec![0u8; MAX_RECORD];
+        let mut out = vec![0u8; MAX_RECORD];
         let mut message_id = None;
         let mut parts: Vec<Option<Vec<u8>>> = Vec::new();
         let mut total = 0usize;
@@ -215,22 +215,28 @@ pub fn fingerprint(key: &[u8]) -> String {
         .join("-")
 }
 
-pub fn start_heartbeat(connection: &Arc<Mutex<Connection<TcpStream>>>) {
+pub fn start_heartbeat(connection: &Arc<Mutex<Connection<TcpStream>>>) -> watch::Sender<bool> {
+    let (stop_tx, mut stop_rx) = watch::channel(false);
     let connection = Arc::downgrade(connection);
     tokio::spawn(async move {
         loop {
-            tokio::time::sleep(Duration::from_secs(15)).await;
-            let Some(connection) = connection.upgrade() else {
-                break;
-            };
-            let mut connection = connection.lock().await;
-            if connection.send(&Request::Ping).await.is_err()
-                || !matches!(connection.receive::<Response>().await, Ok(Response::Pong))
-            {
-                break;
+            tokio::select! {
+                _ = stop_rx.changed() => break,
+                _ = tokio::time::sleep(Duration::from_secs(15)) => {
+                    let Some(connection) = connection.upgrade() else {
+                        break;
+                    };
+                    let mut connection = connection.lock().await;
+                    if connection.send(&Request::Ping).await.is_err()
+                        || !matches!(connection.receive::<Response>().await, Ok(Response::Pong))
+                    {
+                        break;
+                    }
+                }
             }
         }
     });
+    stop_tx
 }
 
 fn params() -> Result<NoiseParams, String> {
@@ -352,30 +358,28 @@ async fn serve_peer(
             } => {
                 let active = *state.active_session.read().await;
                 let code = state.join_code.code.read().await.clone();
-                let blocked = {
-                    let now = Instant::now();
-                    let mut failures = failures.lock().await;
-                    let attempts = failures.entry(peer_ip).or_default();
+                let is_match =
+                    active == Some(session_id) && code.as_deref() == Some(join_code.as_str());
+
+                let mut failures_lock = failures.lock().await;
+                let now = Instant::now();
+                failures_lock.retain(|_, attempts| {
                     while attempts
                         .front()
                         .is_some_and(|at| now.duration_since(*at) >= Duration::from_secs(60))
                     {
                         attempts.pop_front();
                     }
-                    attempts.len() >= 20
-                };
-                if blocked
-                    || active != Some(session_id)
-                    || code.as_deref() != Some(join_code.as_str())
-                {
+                    !attempts.is_empty()
+                });
+                let attempts = failures_lock.entry(peer_ip).or_default();
+                let blocked = attempts.len() >= 20;
+
+                if blocked || !is_match {
                     if !blocked {
-                        failures
-                            .lock()
-                            .await
-                            .entry(peer_ip)
-                            .or_default()
-                            .push_back(Instant::now());
+                        attempts.push_back(now);
                     }
+                    drop(failures_lock);
                     Response::Error {
                         message: if blocked {
                             "参加試行が多すぎます。1分後に再度お試しください"
@@ -384,35 +388,41 @@ async fn serve_peer(
                         }
                         .into(),
                     }
-                } else if let Some(quiz) = state.quiz.read().await.clone() {
-                    failures.lock().await.remove(&peer_ip);
-                    let mut peers = peers.lock().await;
-                    let token = peers
-                        .entry(remote.clone())
-                        .or_insert_with(|| Uuid::new_v4().to_string())
-                        .clone();
-                    let mut roster = state.students.write().await;
-                    if !roster.iter().any(|s| s.participant_token == token) {
-                        roster.push(StudentInfo {
-                            participant_token: token.clone(),
-                            connected_at: chrono::Utc::now(),
-                        });
-                    }
-                    Response::Joined {
-                        session_id,
-                        participant_token: token,
-                        quiz,
-                    }
                 } else {
-                    Response::Error {
-                        message: "クイズが配信されていません".into(),
+                    failures_lock.remove(&peer_ip);
+                    drop(failures_lock);
+
+                    if let Some(quiz) = state.quiz.read().await.clone() {
+                        let mut peers = peers.lock().await;
+                        let token = peers
+                            .entry(remote.clone())
+                            .or_insert_with(|| Uuid::new_v4().to_string())
+                            .clone();
+                        let mut roster = state.students.write().await;
+                        if !roster.iter().any(|s| s.participant_token == token) {
+                            roster.push(StudentInfo {
+                                participant_token: token.clone(),
+                                connected_at: chrono::Utc::now(),
+                            });
+                        }
+                        Response::Joined {
+                            session_id,
+                            participant_token: token,
+                            quiz,
+                        }
+                    } else {
+                        Response::Error {
+                            message: "クイズが配信されていません".into(),
+                        }
                     }
                 }
             }
             Request::Analysis(mut event) => {
+                let active_session = *state.active_session.read().await;
                 let token = peers.lock().await.get(&remote).cloned();
-                if token.as_deref() != Some(event.participant_token.as_str())
-                    || event.session_id != *state.active_session.read().await
+                if active_session.is_none()
+                    || event.session_id != active_session
+                    || token.as_deref() != Some(event.participant_token.as_str())
                     || !state
                         .students
                         .read()
@@ -426,7 +436,7 @@ async fn serve_peer(
                 } else {
                     let mut events = state.analysis_events.lock().await;
                     if !events.iter().any(|e| e.id == event.id) {
-                        event.session_id = Some(event.session_id.unwrap());
+                        event.session_id = active_session;
                         events.push(event.clone());
                         if let Some(app) = &state.event_app {
                             let _ = app.emit("analysis-event", &event);
@@ -445,5 +455,106 @@ async fn serve_peer(
         if close {
             return Ok(());
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_fingerprint_format() {
+        let key = [0xabu8; 32];
+        let fp = fingerprint(&key);
+        let parts: Vec<&str> = fp.split('-').collect();
+        assert_eq!(parts.len(), 8);
+        for part in parts {
+            assert_eq!(part.len(), 4);
+            assert!(part.chars().all(|c| c.is_ascii_hexdigit()));
+        }
+    }
+
+    #[tokio::test]
+    async fn test_handshake_client_server_and_ping_pong() {
+        let client_keys = keypair().unwrap();
+        let server_keys = keypair().unwrap();
+
+        let (client_io, server_io) = tokio::io::duplex(65536);
+
+        let server_task = tokio::spawn(async move {
+            let mut conn = Connection::handshake_server(server_io, &server_keys.private)
+                .await
+                .unwrap();
+            let req: Request = conn.receive().await.unwrap();
+            assert!(matches!(req, Request::Ping));
+            conn.send(&Response::Pong).await.unwrap();
+            conn
+        });
+
+        let client_task = tokio::spawn(async move {
+            let mut conn = Connection::handshake_client(client_io, &client_keys.private)
+                .await
+                .unwrap();
+            conn.send(&Request::Ping).await.unwrap();
+            let resp: Response = conn.receive().await.unwrap();
+            assert!(matches!(resp, Response::Pong));
+            conn
+        });
+
+        let (server_conn, client_conn) = tokio::try_join!(server_task, client_task).unwrap();
+        assert_eq!(server_conn.remote_static, client_keys.public);
+        assert_eq!(client_conn.remote_static, server_keys.public);
+    }
+
+    #[tokio::test]
+    async fn test_large_payload_fragmentation_roundtrip() {
+        let client_keys = keypair().unwrap();
+        let server_keys = keypair().unwrap();
+        let (client_io, server_io) = tokio::io::duplex(131072);
+
+        #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
+        struct LargePayload {
+            data: String,
+        }
+
+        let large_string = "A".repeat(150_000); // 150KB -> exceeds 60_000 byte fragment size
+
+        let server_task = tokio::spawn(async move {
+            let mut conn = Connection::handshake_server(server_io, &server_keys.private)
+                .await
+                .unwrap();
+            let payload: LargePayload = conn.receive().await.unwrap();
+            conn.send(&payload).await.unwrap();
+        });
+
+        let client_task = tokio::spawn(async move {
+            let mut conn = Connection::handshake_client(client_io, &client_keys.private)
+                .await
+                .unwrap();
+            let payload = LargePayload {
+                data: large_string.clone(),
+            };
+            conn.send(&payload).await.unwrap();
+            let received: LargePayload = conn.receive().await.unwrap();
+            assert_eq!(received.data, large_string);
+        });
+
+        tokio::try_join!(server_task, client_task).unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_invalid_handshake_payload_rejected() {
+        let server_keys = keypair().unwrap();
+        let (mut client_io, server_io) = tokio::io::duplex(65536);
+
+        let server_task = tokio::spawn(async move {
+            Connection::handshake_server(server_io, &server_keys.private).await
+        });
+
+        // Write an invalid frame from client
+        let _ = write_frame(&mut client_io, b"INVALID_NOISE_INIT").await;
+
+        let result = server_task.await.unwrap();
+        assert!(result.is_err(), "Server should reject invalid handshake");
     }
 }

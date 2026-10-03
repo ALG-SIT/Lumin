@@ -71,16 +71,20 @@ export function TeacherSessionControl({
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [selectedQuiz, setSelectedQuiz] = useState<Quiz | null>(null);
   const [joinCode, setJoinCode] = useState<string | null>(null);
-  const [teacherFingerprint, setTeacherFingerprint] = useState<string | null>(null);
+  const [teacherFingerprint, setTeacherFingerprint] = useState<string | null>(
+    null,
+  );
   const [students, setStudents] = useState<Student[]>([]);
   const [sessionActive, setSessionActive] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    invoke<{ quiz: Quiz | null; joinCode: string | null; teacherFingerprint: string | null }>(
-      "get_teacher_session",
-    )
+    invoke<{
+      quiz: Quiz | null;
+      joinCode: string | null;
+      teacherFingerprint: string | null;
+    }>("get_teacher_session")
       .then((session) => {
         setSelectedQuiz(session.quiz);
         setJoinCode(session.joinCode);
@@ -118,7 +122,9 @@ export function TeacherSessionControl({
         quizId: selectedQuiz.id,
       });
       setJoinCode(code);
-      const session = await invoke<{ teacherFingerprint: string | null }>("get_teacher_session");
+      const session = await invoke<{ teacherFingerprint: string | null }>(
+        "get_teacher_session",
+      );
       setTeacherFingerprint(session.teacherFingerprint);
       setSessionActive(true);
       onSessionStarted(code);
@@ -268,7 +274,9 @@ export function TeacherSessionControl({
             </p>
             <span className={joinCodeLabel}>教師の確認文字列</span>
             <code>{teacherFingerprint ?? "準備中"}</code>
-            <p className={joinCodeHint}>生徒の画面に表示される文字列と一致することを確認してください</p>
+            <p className={joinCodeHint}>
+              生徒の画面に表示される文字列と一致することを確認してください
+            </p>
           </div>
 
           <div className={sessionCard}>

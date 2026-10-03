@@ -89,6 +89,7 @@ pub(crate) struct StudentConnection {
     join_code: String,
     private_key: Vec<u8>,
     teacher_fingerprint: String,
+    heartbeat_stopper: Arc<Mutex<Option<watch::Sender<bool>>>>,
 }
 
 async fn send_with_reconnect(
@@ -149,6 +150,11 @@ async fn send_with_reconnect(
     match reconnected.receive::<NoiseResponse>().await? {
         NoiseResponse::Ack(ack) if ack.event_id == event_id => {
             *connection.connection.lock().await = reconnected;
+            let mut stopper = connection.heartbeat_stopper.lock().await;
+            if let Some(old) = stopper.take() {
+                let _ = old.send(true);
+            }
+            *stopper = Some(noise::start_heartbeat(&connection.connection));
             Ok(())
         }
         NoiseResponse::Error { message } => Err(message),
@@ -385,6 +391,7 @@ pub async fn student_join(
         .clone()
         .ok_or("生徒の鍵を生成できません")?;
     let connection_ref = connection_ref.clone();
+    let heartbeat_stopper = Arc::new(Mutex::new(Some(noise::start_heartbeat(&connection_ref))));
     manager.student_connection = Some(StudentConnection {
         session_id,
         participant_token: token.clone(),
@@ -394,8 +401,8 @@ pub async fn student_join(
         join_code,
         private_key,
         teacher_fingerprint: fingerprint,
+        heartbeat_stopper,
     });
-    noise::start_heartbeat(&connection_ref);
     Ok(serde_json::json!({"participantToken": token, "sessionId": session_id, "quiz": quiz}))
 }
 
@@ -493,12 +500,16 @@ pub async fn end_session(
         let _ = handle.await;
     }
 
+    if let Some(conn) = manager.student_connection.take() {
+        if let Some(stopper) = conn.heartbeat_stopper.lock().await.take() {
+            let _ = stopper.send(true);
+        }
+    }
     manager.server_state = None;
     manager.active_quiz = None;
     manager.session_id = None;
     manager.join_code = None;
     manager.teacher_fingerprint = None;
-    manager.student_connection = None;
     manager.pending_connection = None;
     manager.student_private_key = None;
     manager.pending_events.lock().await.clear();
@@ -598,5 +609,181 @@ mod tests {
             validate_student_join_payload(&mut valid).unwrap(),
             "participant-1"
         );
+    }
+
+    #[tokio::test]
+    async fn test_queued_analysis_capacity_limit() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server_key = noise::keypair().unwrap();
+        let client_key = noise::keypair().unwrap();
+
+        let server_task = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            NoiseConnection::handshake_server(stream, &server_key.private)
+                .await
+                .unwrap()
+        });
+
+        let client_stream = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+        let client_conn = NoiseConnection::handshake_client(client_stream, &client_key.private)
+            .await
+            .unwrap();
+        let _server_conn = server_task.await.unwrap();
+
+        let dummy_conn = StudentConnection {
+            session_id: Uuid::new_v4(),
+            participant_token: "token".into(),
+            connection: Arc::new(Mutex::new(client_conn)),
+            host: "127.0.0.1".into(),
+            port,
+            join_code: "1234".into(),
+            private_key: client_key.private,
+            teacher_fingerprint: "fp".into(),
+            heartbeat_stopper: Arc::new(Mutex::new(None)),
+        };
+
+        let pending = Arc::new(Mutex::new(VecDeque::new()));
+        for _ in 0..1024 {
+            pending.lock().await.push_back(AnalysisEvent {
+                id: Uuid::new_v4(),
+                participant_token: "p".into(),
+                session_id: None,
+                question_id: "q".into(),
+                concept: "c".into(),
+                misconception: None,
+                correct: true,
+                hint_count: 0,
+                retry_success: false,
+                submitted_at: chrono::Utc::now(),
+            });
+        }
+
+        let new_event = AnalysisEvent {
+            id: Uuid::new_v4(),
+            participant_token: "p".into(),
+            session_id: None,
+            question_id: "q2".into(),
+            concept: "c".into(),
+            misconception: None,
+            correct: true,
+            hint_count: 0,
+            retry_success: false,
+            submitted_at: chrono::Utc::now(),
+        };
+
+        let res = send_queued_analysis(dummy_conn, pending, new_event).await;
+        assert!(res.is_err());
+        assert!(res.unwrap_err().contains("上限に達しました"));
+    }
+
+    #[tokio::test]
+    async fn test_noise_tcp_session_prepare_and_join() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        drop(listener);
+
+        let session_id = Uuid::new_v4();
+        let server_state = Arc::new(ServerState {
+            session_id: Some(session_id.to_string()),
+            join_code: Arc::new(JoinCodeState::new("5678".into())),
+            teacher_token: "teacher-token".into(),
+            active_session: tokio::sync::RwLock::new(Some(session_id)),
+            students: tokio::sync::RwLock::new(Vec::new()),
+            analysis_events: Arc::new(Mutex::new(Vec::new())),
+            quiz: tokio::sync::RwLock::new(Some(Quiz {
+                id: "q1".into(),
+                title: "Test Quiz".into(),
+                subject: "math".into(),
+                topic: Some("linear".into()),
+                questions: vec![],
+            })),
+            event_app: None,
+        });
+
+        let (shutdown_tx, shutdown_rx) = watch::channel(false);
+        let (server_handle, teacher_fp) = noise::serve(port, server_state.clone(), shutdown_rx)
+            .await
+            .unwrap();
+
+        let client_key = noise::keypair().unwrap();
+        let stream = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+        let mut client_conn = NoiseConnection::handshake_client(stream, &client_key.private)
+            .await
+            .unwrap();
+        assert_eq!(noise::fingerprint(&client_conn.remote_static), teacher_fp);
+
+        // 1. Prepare
+        client_conn.send(&NoiseRequest::Prepare).await.unwrap();
+        let resp: NoiseResponse = client_conn.receive().await.unwrap();
+        match resp {
+            NoiseResponse::Prepared { session_id: s } => assert_eq!(s, session_id),
+            _ => panic!("Expected Prepared"),
+        }
+
+        // 2. Join with wrong code -> expect Error
+        client_conn
+            .send(&NoiseRequest::Join {
+                session_id,
+                join_code: "0000".into(),
+            })
+            .await
+            .unwrap();
+        let resp: NoiseResponse = client_conn.receive().await.unwrap();
+        assert!(matches!(resp, NoiseResponse::Error { .. }));
+
+        // Server closes connection on Error. Let's reconnect for valid join
+        let stream = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+        let mut client_conn = NoiseConnection::handshake_client(stream, &client_key.private)
+            .await
+            .unwrap();
+
+        // 3. Join with correct code
+        client_conn
+            .send(&NoiseRequest::Join {
+                session_id,
+                join_code: "5678".into(),
+            })
+            .await
+            .unwrap();
+        let resp: NoiseResponse = client_conn.receive().await.unwrap();
+        let participant_token = match resp {
+            NoiseResponse::Joined {
+                session_id: s,
+                participant_token,
+                quiz,
+            } => {
+                assert_eq!(s, session_id);
+                assert_eq!(quiz.id, "q1");
+                participant_token
+            }
+            other => panic!("Expected Joined, got {:?}", other),
+        };
+
+        // 4. Send AnalysisEvent
+        let event_id = Uuid::new_v4();
+        client_conn
+            .send(&NoiseRequest::Analysis(AnalysisEvent {
+                id: event_id,
+                participant_token,
+                session_id: Some(session_id),
+                question_id: "q1".into(),
+                concept: "test".into(),
+                misconception: None,
+                correct: true,
+                hint_count: 0,
+                retry_success: false,
+                submitted_at: chrono::Utc::now(),
+            }))
+            .await
+            .unwrap();
+        let resp: NoiseResponse = client_conn.receive().await.unwrap();
+        match resp {
+            NoiseResponse::Ack(ack) => assert_eq!(ack.event_id, event_id),
+            other => panic!("Expected Ack, got {:?}", other),
+        }
+
+        let _ = shutdown_tx.send(true);
+        let _ = server_handle.await;
     }
 }
