@@ -1233,8 +1233,11 @@ mod tests {
         server.handle.await.unwrap();
 
         assert!(conn.receive::<Response>().await.is_err());
+        // Windows retries SYNs even for a closed loopback port, so reporting
+        // connection refusal can take about two seconds. Allow CI headroom;
+        // elapsed deadlines must still fail rather than count as refusal.
         let reconnect = tokio::time::timeout(
-            Duration::from_secs(2),
+            Duration::from_secs(10),
             TcpStream::connect(("127.0.0.1", server.port)),
         )
         .await
