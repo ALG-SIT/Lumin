@@ -3,7 +3,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { baseInputFocus } from "../styles/global.css.ts";
 import { errorMessage, privacyNote } from "../styles/shared.css.ts";
 import {
+  cancelButton,
   codeInput,
+  confirmActions,
+  confirmButton,
+  confirmCard,
+  confirmFingerprint,
+  confirmPrompt,
   joinButton,
   joinCard,
   joinHeader,
@@ -28,7 +34,14 @@ export interface DiscoveredTeacher {
   name: string;
   host: string;
   port: number;
-  session_uuid: string;
+  session_uuid: string | null;
+  compatible?: boolean;
+}
+
+interface PendingJoin {
+  teacher: DiscoveredTeacher;
+  pendingId: string;
+  teacherFingerprint: string;
 }
 
 export interface JoinResultPayload {
@@ -52,6 +65,7 @@ export function StudentJoin({ onJoined, onReset }: StudentJoinProps) {
   const [error, setError] = useState<string | null>(null);
 
   const [isJoining, setIsJoining] = useState(false);
+  const [pending, setPending] = useState<PendingJoin | null>(null);
   const joining = useRef(false);
 
   const searchTeachers = useCallback(() => {
@@ -73,17 +87,24 @@ export function StudentJoin({ onJoined, onReset }: StudentJoinProps) {
 
   const handleJoin = async (teacher: DiscoveredTeacher) => {
     if (joining.current) return;
+    if (teacher.compatible === false) {
+      setError("この教室は旧版です。教師端末のアプリを更新してください。");
+      return;
+    }
     joining.current = true;
     setIsJoining(true);
     setError(null);
     try {
-      const res = await invoke<JoinResultPayload>("student_join", {
+      if (pending) await invoke("student_cancel_connection");
+      const prepared = await invoke<{
+        pendingId: string;
+        teacherFingerprint: string;
+      }>("student_prepare_connection", {
         host: teacher.host,
         port: teacher.port,
         sessionId: teacher.session_uuid,
-        joinCode,
       });
-      onJoined(res);
+      setPending({ teacher, ...prepared });
     } catch (e) {
       setError(String(e));
     } finally {
@@ -92,27 +113,110 @@ export function StudentJoin({ onJoined, onReset }: StudentJoinProps) {
     }
   };
 
+  const confirmJoin = async () => {
+    if (!pending || joinCode.length !== 4 || joining.current) return;
+    joining.current = true;
+    setIsJoining(true);
+    setError(null);
+    try {
+      const res = await invoke<JoinResultPayload>("student_join", {
+        pendingId: pending.pendingId,
+        teacherFingerprint: pending.teacherFingerprint,
+        joinCode,
+      });
+      setPending(null);
+      onJoined(res);
+    } catch (e) {
+      setError(String(e));
+      setPending(null);
+      await invoke("student_cancel_connection").catch(() => undefined);
+    } finally {
+      joining.current = false;
+      setIsJoining(false);
+    }
+  };
+
+  const cancelJoin = async () => {
+    await invoke("student_cancel_connection").catch(() => undefined);
+    setPending(null);
+  };
+
+  const isTeacherPending = (teacher: DiscoveredTeacher) => {
+    if (!pending) return false;
+    if (pending.teacher.session_uuid && teacher.session_uuid) {
+      return pending.teacher.session_uuid === teacher.session_uuid;
+    }
+    return (
+      pending.teacher.host === teacher.host &&
+      pending.teacher.port === teacher.port
+    );
+  };
+
+  const renderConfirmation = () => {
+    if (!pending) return null;
+    return (
+      <fieldset className={confirmCard} aria-label="教師の確認">
+        <p className={confirmPrompt}>
+          教師画面の確認文字列と一致することを確認してください。
+        </p>
+        <code className={confirmFingerprint}>{pending.teacherFingerprint}</code>
+        <div className={confirmActions}>
+          <button
+            className={confirmButton}
+            type="button"
+            onClick={confirmJoin}
+            disabled={!canJoin || isJoining}
+          >
+            {isJoining ? "参加中…" : "一致を確認して参加"}
+          </button>
+          <button
+            className={cancelButton}
+            type="button"
+            onClick={cancelJoin}
+            disabled={isJoining}
+          >
+            キャンセル
+          </button>
+        </div>
+      </fieldset>
+    );
+  };
+
   const validPort =
     /^\d+$/.test(manualPort) &&
     Number(manualPort) >= 1 &&
     Number(manualPort) <= 65535;
+
+  const manualTeacher: DiscoveredTeacher = {
+    name: "手動指定の教室",
+    host: manualIp.trim(),
+    port: Number(manualPort),
+    session_uuid: null,
+  };
+
   const handleManualJoin = () => {
     if (!manualIp.trim() || !validPort || joinCode.length !== 4) return;
-    return handleJoin({
-      name: "",
-      host: manualIp.trim(),
-      port: Number(manualPort),
-      session_uuid: "",
-    });
+    return handleJoin(manualTeacher);
   };
 
   const canJoin = joinCode.length === 4;
+  const handleReset = () => {
+    if (pending)
+      void invoke("student_cancel_connection").catch(() => undefined);
+    setPending(null);
+    onReset();
+  };
 
   return (
     <div className={studentJoin}>
       <div className={joinHeader}>
         <h2 className={joinTitle}>教室に参加</h2>
-        <button className={joinReset} type="button" onClick={onReset}>
+        <button
+          className={joinReset}
+          type="button"
+          onClick={handleReset}
+          disabled={isJoining}
+        >
           役割を選び直す
         </button>
       </div>
@@ -148,6 +252,7 @@ export function StudentJoin({ onJoined, onReset }: StudentJoinProps) {
                     <span className={teacherName}>{teacher.name}</span>
                     <span className={teacherMeta}>
                       {teacher.host}:{teacher.port}
+                      {teacher.compatible === false ? " · 更新が必要" : ""}
                     </span>
                   </div>
                   <input
@@ -167,10 +272,13 @@ export function StudentJoin({ onJoined, onReset }: StudentJoinProps) {
                     className={joinButton}
                     type="button"
                     onClick={() => handleJoin(teacher)}
-                    disabled={!canJoin || isJoining}
+                    disabled={
+                      !canJoin || isJoining || teacher.compatible === false
+                    }
                   >
                     {isJoining ? "参加中…" : "参加"}
                   </button>
+                  {isTeacherPending(teacher) && renderConfirmation()}
                 </div>
               ))}
             </div>
@@ -219,6 +327,7 @@ export function StudentJoin({ onJoined, onReset }: StudentJoinProps) {
           >
             {isJoining ? "参加中…" : "参加"}
           </button>
+          {isTeacherPending(manualTeacher) && renderConfirmation()}
         </div>
       </div>
 

@@ -19,6 +19,10 @@ describe("Tauri teacher and student classroom flow", () => {
     const joinCode = teacher.$("[aria-live='polite']");
     await expect(joinCode).toHaveText(/[0-9]{4}/);
     const code = await joinCode.getText();
+    await teacher.$("button=セッション").click();
+    const teacherSession = teacher.$("section[aria-label='小テスト配信']");
+    await expect(teacherSession).toExist();
+    const teacherFingerprint = await teacherSession.$("code").getText();
 
     await expect(student.$("h1")).toHaveText("Lumin");
     await student.$("button[aria-label='生徒として参加画面を開く']").click();
@@ -26,6 +30,14 @@ describe("Tauri teacher and student classroom flow", () => {
     await student.$("input[aria-label='ポート']").setValue("8765");
     await student.$("input[aria-label='4桁の参加コード']").setValue(code);
     await student.$("button=参加").click();
+    const studentFingerprint = student.$(
+      "fieldset[aria-label='教師の確認'] code",
+    );
+    const fingerprint = await studentFingerprint.getText();
+    if (fingerprint !== teacherFingerprint) {
+      throw new Error("Teacher and student fingerprints do not match");
+    }
+    await student.$("button=一致を確認して参加").click();
     await expect(student.$("input[placeholder='答えを入力']")).toExist();
     await student.$("input[placeholder='答えを入力']").setValue("999");
     await student.$("button=答えを確かめる").click();

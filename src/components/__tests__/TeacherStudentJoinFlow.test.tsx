@@ -15,6 +15,13 @@ import { TeacherSessionControl } from "../TeacherSessionControl";
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(async (cmd: string) => {
     if (cmd === "browse_teachers") return [];
+    if (cmd === "student_prepare_connection") {
+      return {
+        pendingId: "test-pending-123",
+        teacherFingerprint: "1234-5678-90ab-cdef",
+        sessionId: "00000000-0000-0000-0000-000000000001",
+      };
+    }
     if (cmd === "student_join") return null;
     if (cmd === "list_quizzes") return [];
     if (cmd === "start_session") return "1234";
@@ -122,6 +129,12 @@ describe("Teacher-student join flow (integration)", () => {
     expect(joinBtn).not.toBeDisabled();
 
     fireEvent.click(joinBtn);
+
+    const confirmBtn = await screen.findByRole("button", {
+      name: "一致を確認して参加",
+    });
+    expect(screen.getByText("1234-5678-90ab-cdef")).toBeDefined();
+    fireEvent.click(confirmBtn);
 
     await waitFor(() => {
       expect(onJoined).toHaveBeenCalled();

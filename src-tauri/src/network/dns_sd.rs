@@ -8,7 +8,7 @@
 //! # Service layout
 //!
 //! - **Service type:** `_lumin-class._tcp`
-//! - **TXT record keys:** `code_required` (bool flag), `version` (string)
+//! - **TXT record keys:** `code_required` (bool flag), `version` (string), `transport` (string)
 //! - **Port:** OS-assigned via the HTTP server (Todo 18); passed in at advertise time.
 
 use std::collections::HashMap;
@@ -30,7 +30,7 @@ const PROTOCOL: TransportProtocol = TransportProtocol::Tcp;
 
 /// Current service protocol version — embedded in TXT records so students can
 /// detect mismatched versions early.
-const PROTOCOL_VERSION: &str = "1.0";
+const PROTOCOL_VERSION: &str = "2";
 
 // ── Discovery result contract ────────────────────────────────────────────────
 
@@ -45,6 +45,7 @@ pub struct TeacherDiscovered {
     pub host: String,
     pub port: u16,
     pub session_uuid: Option<String>,
+    pub compatible: bool,
 }
 
 // ── Internal browse message types (mirrors the plugin's unexported enum) ─────
@@ -114,6 +115,10 @@ pub async fn advertise_teacher(
     txt.insert(
         "version".to_string(),
         TxtRecordValue::BinaryData(PROTOCOL_VERSION.as_bytes().to_vec()),
+    );
+    txt.insert(
+        "transport".to_string(),
+        TxtRecordValue::BinaryData(b"noise".to_vec()),
     );
 
     let options = AdvertiseOptions {
@@ -223,12 +228,20 @@ pub(crate) fn merge_records(records: Vec<BrowseServiceRecord>) -> Vec<BrowseServ
 }
 
 fn to_discovered(r: BrowseServiceRecord) -> Option<TeacherDiscovered> {
-    let session_uuid = r.txt.as_ref()?.get("session_uuid").map(decode_txt_value);
+    let txt = r.txt.as_ref()?;
+    let session_uuid = txt.get("session_uuid").map(decode_txt_value);
+    let compatible = txt
+        .get("version")
+        .is_some_and(|v| decode_txt_value(v) == "2")
+        && txt
+            .get("transport")
+            .is_some_and(|v| decode_txt_value(v) == "noise");
     Some(TeacherDiscovered {
         name: r.name,
         host: pick_connect_address(&r.host, &r.addresses),
         port: r.port?,
         session_uuid,
+        compatible,
     })
 }
 
@@ -390,5 +403,78 @@ mod discovery_tests {
                 .addresses,
             ["10.0.0.9"]
         );
+    }
+
+    fn record(txt: Option<HashMap<String, serde_json::Value>>) -> BrowseServiceRecord {
+        BrowseServiceRecord {
+            name: "Lumin教室 ABCDEF".into(),
+            host: Some("lumin.local.".into()),
+            port: Some(8765),
+            addresses: vec!["192.168.1.20".into()],
+            is_active: true,
+            txt,
+        }
+    }
+
+    fn txt(entries: &[(&str, &str)]) -> Option<HashMap<String, serde_json::Value>> {
+        Some(
+            entries
+                .iter()
+                .map(|(k, v)| (k.to_string(), utf8_value(v)))
+                .collect(),
+        )
+    }
+
+    #[test]
+    fn to_discovered_marks_noise_v2_teacher_as_compatible() {
+        let discovered = to_discovered(record(txt(&[
+            ("version", PROTOCOL_VERSION),
+            ("transport", "noise"),
+            ("session_uuid", "11111111-2222-3333-4444-555555555555"),
+        ])))
+        .unwrap();
+        assert!(discovered.compatible);
+        assert_eq!(discovered.host, "192.168.1.20");
+        assert_eq!(discovered.port, 8765);
+        assert_eq!(
+            discovered.session_uuid.as_deref(),
+            Some("11111111-2222-3333-4444-555555555555")
+        );
+    }
+
+    #[test]
+    fn to_discovered_marks_legacy_or_unknown_transport_as_incompatible() {
+        for entries in [
+            vec![("version", "1"), ("transport", "noise")],
+            vec![("version", PROTOCOL_VERSION)],
+            vec![("version", PROTOCOL_VERSION), ("transport", "http")],
+            vec![("transport", "noise")],
+        ] {
+            let discovered = to_discovered(record(txt(&entries))).unwrap();
+            assert!(!discovered.compatible, "{entries:?}");
+        }
+    }
+
+    #[test]
+    fn to_discovered_requires_txt_and_port() {
+        assert!(to_discovered(record(None)).is_none());
+        let mut no_port = record(txt(&[
+            ("version", PROTOCOL_VERSION),
+            ("transport", "noise"),
+        ]));
+        no_port.port = None;
+        assert!(to_discovered(no_port).is_none());
+    }
+
+    #[test]
+    fn teacher_discovered_serializes_compatible_flag_in_snake_case() {
+        let discovered = to_discovered(record(txt(&[
+            ("version", PROTOCOL_VERSION),
+            ("transport", "noise"),
+        ])))
+        .unwrap();
+        let value = serde_json::to_value(discovered).unwrap();
+        assert_eq!(value["compatible"], json!(true));
+        assert_eq!(value["session_uuid"], serde_json::Value::Null);
     }
 }

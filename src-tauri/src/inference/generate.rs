@@ -905,9 +905,10 @@ mod tests {
             }
 
             let first = ChatTurn::user("3+4はいくつですか。数字だけ答えてください。");
-            let answer = generate_conversation(&state, &[first.clone()], Some(24), None)
-                .await
-                .expect("first turn");
+            let answer =
+                generate_conversation(&state, std::slice::from_ref(&first), Some(24), None)
+                    .await
+                    .expect("first turn");
             let answer = answer.text.trim().to_string();
             println!("[{variant} turn1] {answer}");
             assert!(
