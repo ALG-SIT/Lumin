@@ -786,4 +786,367 @@ mod tests {
         let _ = shutdown_tx.send(true);
         let _ = server_handle.await;
     }
+
+    // ── Student-side delivery over Noise TCP ────────────────────────────────
+
+    const TEST_JOIN_CODE: &str = "5678";
+
+    struct Classroom {
+        port: u16,
+        fingerprint: String,
+        session_id: Uuid,
+        state: Arc<ServerState>,
+        shutdown: watch::Sender<bool>,
+        handle: tokio::task::JoinHandle<()>,
+    }
+
+    async fn start_classroom() -> Classroom {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let session_id = Uuid::new_v4();
+        let state = Arc::new(ServerState {
+            session_id: Some(session_id.to_string()),
+            join_code: Arc::new(JoinCodeState::new(TEST_JOIN_CODE.into())),
+            teacher_token: "teacher-token".into(),
+            active_session: tokio::sync::RwLock::new(Some(session_id)),
+            students: tokio::sync::RwLock::new(Vec::new()),
+            analysis_events: Arc::new(Mutex::new(Vec::new())),
+            quiz: tokio::sync::RwLock::new(Some(Quiz {
+                id: "q1".into(),
+                title: "Test Quiz".into(),
+                subject: "math".into(),
+                topic: None,
+                questions: vec![],
+            })),
+            event_app: None,
+        });
+        let (shutdown, shutdown_rx) = watch::channel(false);
+        let (handle, fingerprint) =
+            noise::serve_with_listener(listener, state.clone(), shutdown_rx).unwrap();
+        Classroom {
+            port,
+            fingerprint,
+            session_id,
+            state,
+            shutdown,
+            handle,
+        }
+    }
+
+    async fn join_classroom(classroom: &Classroom, private_key: &[u8]) -> StudentConnection {
+        let stream = TcpStream::connect(("127.0.0.1", classroom.port))
+            .await
+            .unwrap();
+        let mut conn = NoiseConnection::handshake_client(stream, private_key)
+            .await
+            .unwrap();
+        conn.send(&NoiseRequest::Join {
+            session_id: classroom.session_id,
+            join_code: TEST_JOIN_CODE.into(),
+        })
+        .await
+        .unwrap();
+        let participant_token = match conn.receive::<NoiseResponse>().await.unwrap() {
+            NoiseResponse::Joined {
+                participant_token, ..
+            } => participant_token,
+            other => panic!("Expected Joined, got {other:?}"),
+        };
+        StudentConnection {
+            session_id: classroom.session_id,
+            participant_token,
+            connection: Arc::new(Mutex::new(conn)),
+            host: "127.0.0.1".into(),
+            port: classroom.port,
+            join_code: TEST_JOIN_CODE.into(),
+            private_key: private_key.to_vec(),
+            teacher_fingerprint: classroom.fingerprint.clone(),
+            heartbeat_stopper: Arc::new(Mutex::new(None)),
+        }
+    }
+
+    /// ハンドシェイク直後に相手が切断する接続。送信失敗→再接続経路を通すために使う。
+    async fn dead_connection(private_key: &[u8]) -> NoiseConnection<TcpStream> {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let peer = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let key = noise::keypair().unwrap();
+            drop(
+                NoiseConnection::handshake_server(stream, &key.private)
+                    .await
+                    .unwrap(),
+            );
+        });
+        let stream = TcpStream::connect(addr).await.unwrap();
+        let conn = NoiseConnection::handshake_client(stream, private_key)
+            .await
+            .unwrap();
+        peer.await.unwrap();
+        conn
+    }
+
+    fn student_event() -> AnalysisEvent {
+        AnalysisEvent {
+            id: Uuid::new_v4(),
+            participant_token: "client-supplied".into(),
+            session_id: None,
+            question_id: "q1".into(),
+            concept: "linear-functions".into(),
+            misconception: None,
+            correct: false,
+            hint_count: 1,
+            retry_success: true,
+            submitted_at: chrono::Utc::now(),
+        }
+    }
+
+    fn stamped(student: &StudentConnection) -> AnalysisEvent {
+        AnalysisEvent {
+            session_id: Some(student.session_id),
+            participant_token: student.participant_token.clone(),
+            ..student_event()
+        }
+    }
+
+    async fn stop_heartbeat(student: &StudentConnection) {
+        if let Some(stopper) = student.heartbeat_stopper.lock().await.take() {
+            let _ = stopper.send(true);
+        }
+    }
+
+    #[tokio::test]
+    async fn send_queued_analysis_delivers_event_with_connection_identity() {
+        let classroom = start_classroom().await;
+        let key = noise::keypair().unwrap();
+        let student = join_classroom(&classroom, &key.private).await;
+        let pending: PendingEventQueue = Arc::new(Mutex::new(VecDeque::new()));
+
+        let event = student_event();
+        send_queued_analysis(student.clone(), pending.clone(), event.clone())
+            .await
+            .unwrap();
+
+        assert!(pending.lock().await.is_empty());
+        let events = classroom.state.analysis_events.lock().await;
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].id, event.id);
+        // クライアントが詰めた値ではなく、接続に紐づく参加者・授業で上書きされる
+        assert_eq!(events[0].participant_token, student.participant_token);
+        assert_eq!(events[0].session_id, Some(classroom.session_id));
+        drop(events);
+        let _ = classroom.shutdown.send(true);
+    }
+
+    #[tokio::test]
+    async fn send_queued_analysis_flushes_backlog_before_new_event_in_order() {
+        let classroom = start_classroom().await;
+        let key = noise::keypair().unwrap();
+        let student = join_classroom(&classroom, &key.private).await;
+
+        let backlog = stamped(&student);
+        let second = stamped(&student);
+        let pending: PendingEventQueue = Arc::new(Mutex::new(VecDeque::from([
+            backlog.clone(),
+            second.clone(),
+        ])));
+        let next = student_event();
+        send_queued_analysis(student.clone(), pending.clone(), next.clone())
+            .await
+            .unwrap();
+
+        assert!(pending.lock().await.is_empty());
+        let ids = classroom
+            .state
+            .analysis_events
+            .lock()
+            .await
+            .iter()
+            .map(|e| e.id)
+            .collect::<Vec<_>>();
+        assert_eq!(ids, [backlog.id, second.id, next.id]);
+        let _ = classroom.shutdown.send(true);
+    }
+
+    #[tokio::test]
+    async fn send_with_reconnect_restores_participation_after_connection_loss() {
+        let classroom = start_classroom().await;
+        let key = noise::keypair().unwrap();
+        let student = join_classroom(&classroom, &key.private).await;
+        *student.connection.lock().await = dead_connection(&key.private).await;
+
+        let event = stamped(&student);
+        send_with_reconnect(&student, event.clone()).await.unwrap();
+
+        // 再接続後の接続に差し替わり、ハートビートも再開している
+        assert_eq!(
+            noise::fingerprint(&student.connection.lock().await.remote_static),
+            classroom.fingerprint
+        );
+        assert!(student.heartbeat_stopper.lock().await.is_some());
+        // 同じ鍵で再参加するため名簿は増えない
+        assert_eq!(classroom.state.students.read().await.len(), 1);
+
+        // 差し替え後の接続でそのまま送信できる
+        let follow_up = stamped(&student);
+        send_with_reconnect(&student, follow_up.clone())
+            .await
+            .unwrap();
+
+        let ids = classroom
+            .state
+            .analysis_events
+            .lock()
+            .await
+            .iter()
+            .map(|e| e.id)
+            .collect::<Vec<_>>();
+        assert_eq!(ids, [event.id, follow_up.id]);
+        stop_heartbeat(&student).await;
+        let _ = classroom.shutdown.send(true);
+    }
+
+    #[tokio::test]
+    async fn send_with_reconnect_refuses_changed_teacher_key() {
+        let classroom = start_classroom().await;
+        let key = noise::keypair().unwrap();
+        let mut student = join_classroom(&classroom, &key.private).await;
+        student.teacher_fingerprint = noise::fingerprint(&noise::keypair().unwrap().public);
+        *student.connection.lock().await = dead_connection(&key.private).await;
+
+        let error = send_with_reconnect(&student, stamped(&student))
+            .await
+            .unwrap_err();
+        assert!(error.contains("教師端末の鍵が変わりました"), "{error}");
+        assert!(classroom.state.analysis_events.lock().await.is_empty());
+        let _ = classroom.shutdown.send(true);
+    }
+
+    #[tokio::test]
+    async fn send_with_reconnect_refuses_different_session() {
+        let classroom = start_classroom().await;
+        let key = noise::keypair().unwrap();
+        let mut student = join_classroom(&classroom, &key.private).await;
+        student.session_id = Uuid::new_v4();
+        *student.connection.lock().await = dead_connection(&key.private).await;
+
+        let error = send_with_reconnect(&student, stamped(&student))
+            .await
+            .unwrap_err();
+        assert!(
+            error.contains("同じ授業へ再接続できませんでした"),
+            "{error}"
+        );
+        assert!(classroom.state.analysis_events.lock().await.is_empty());
+        let _ = classroom.shutdown.send(true);
+    }
+
+    #[tokio::test]
+    async fn send_with_reconnect_refuses_when_participant_token_differs() {
+        let classroom = start_classroom().await;
+        let key = noise::keypair().unwrap();
+        let mut student = join_classroom(&classroom, &key.private).await;
+        student.participant_token = "someone-else".into();
+        *student.connection.lock().await = dead_connection(&key.private).await;
+
+        let error = send_with_reconnect(&student, stamped(&student))
+            .await
+            .unwrap_err();
+        assert!(error.contains("参加状態を復元できませんでした"), "{error}");
+        assert!(classroom.state.analysis_events.lock().await.is_empty());
+        let _ = classroom.shutdown.send(true);
+    }
+
+    #[tokio::test]
+    async fn send_with_reconnect_reports_unreachable_teacher() {
+        let classroom = start_classroom().await;
+        let key = noise::keypair().unwrap();
+        let student = join_classroom(&classroom, &key.private).await;
+        classroom.shutdown.send(true).unwrap();
+        classroom.handle.await.unwrap();
+        *student.connection.lock().await = dead_connection(&key.private).await;
+
+        let error = send_with_reconnect(&student, stamped(&student))
+            .await
+            .unwrap_err();
+        assert!(error.contains("再接続"), "{error}");
+    }
+
+    #[tokio::test]
+    async fn send_queued_analysis_keeps_event_queued_when_delivery_fails() {
+        let classroom = start_classroom().await;
+        let key = noise::keypair().unwrap();
+        let student = join_classroom(&classroom, &key.private).await;
+        classroom.shutdown.send(true).unwrap();
+        classroom.handle.await.unwrap();
+        *student.connection.lock().await = dead_connection(&key.private).await;
+        let pending: PendingEventQueue = Arc::new(Mutex::new(VecDeque::new()));
+
+        let event = student_event();
+        let error = send_queued_analysis(student.clone(), pending.clone(), event.clone())
+            .await
+            .unwrap_err();
+
+        assert!(error.contains("回答を送信待ちに保存しました"), "{error}");
+        let pending = pending.lock().await;
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].id, event.id);
+        assert_eq!(pending[0].session_id, Some(student.session_id));
+        assert_eq!(pending[0].participant_token, student.participant_token);
+    }
+
+    #[tokio::test]
+    async fn send_queued_analysis_does_not_duplicate_pending_event_on_failure() {
+        let classroom = start_classroom().await;
+        let key = noise::keypair().unwrap();
+        let student = join_classroom(&classroom, &key.private).await;
+        classroom.shutdown.send(true).unwrap();
+        classroom.handle.await.unwrap();
+        *student.connection.lock().await = dead_connection(&key.private).await;
+
+        let event = stamped(&student);
+        let pending: PendingEventQueue = Arc::new(Mutex::new(VecDeque::from([event.clone()])));
+        assert!(
+            send_queued_analysis(student, pending.clone(), event.clone())
+                .await
+                .is_err()
+        );
+
+        // サーバー側の重複排除に隠されないよう、送信失敗後のキューを確認する。
+        let pending = pending.lock().await;
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].id, event.id);
+    }
+
+    #[tokio::test]
+    async fn student_send_context_requires_joined_classroom() {
+        let mut manager = SessionManager::new();
+        assert!(!manager.is_active());
+        let error = manager.student_send_context().err().unwrap();
+        assert!(error.contains("教室に参加し直してください"));
+
+        let classroom = start_classroom().await;
+        let key = noise::keypair().unwrap();
+        let student = join_classroom(&classroom, &key.private).await;
+        manager.student_connection = Some(student.clone());
+
+        let (connection, pending) = manager.student_send_context().unwrap();
+        assert_eq!(connection.participant_token, student.participant_token);
+        assert!(Arc::ptr_eq(&pending, &manager.pending_events));
+        assert!(Arc::ptr_eq(&connection.connection, &student.connection));
+        let _ = classroom.shutdown.send(true);
+    }
+
+    #[test]
+    fn student_summary_maps_token_and_rfc3339_timestamp() {
+        let connected_at = chrono::DateTime::parse_from_rfc3339("2026-01-02T03:04:05Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc);
+        let summary = StudentSummary::from(&StudentInfo {
+            participant_token: "participant-1".into(),
+            connected_at,
+        });
+        assert_eq!(summary.id, "participant-1");
+        assert_eq!(summary.joined_at, "2026-01-02T03:04:05+00:00");
+    }
 }

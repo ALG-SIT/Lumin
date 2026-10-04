@@ -404,4 +404,77 @@ mod discovery_tests {
             ["10.0.0.9"]
         );
     }
+
+    fn record(txt: Option<HashMap<String, serde_json::Value>>) -> BrowseServiceRecord {
+        BrowseServiceRecord {
+            name: "Lumin教室 ABCDEF".into(),
+            host: Some("lumin.local.".into()),
+            port: Some(8765),
+            addresses: vec!["192.168.1.20".into()],
+            is_active: true,
+            txt,
+        }
+    }
+
+    fn txt(entries: &[(&str, &str)]) -> Option<HashMap<String, serde_json::Value>> {
+        Some(
+            entries
+                .iter()
+                .map(|(k, v)| (k.to_string(), utf8_value(v)))
+                .collect(),
+        )
+    }
+
+    #[test]
+    fn to_discovered_marks_noise_v2_teacher_as_compatible() {
+        let discovered = to_discovered(record(txt(&[
+            ("version", PROTOCOL_VERSION),
+            ("transport", "noise"),
+            ("session_uuid", "11111111-2222-3333-4444-555555555555"),
+        ])))
+        .unwrap();
+        assert!(discovered.compatible);
+        assert_eq!(discovered.host, "192.168.1.20");
+        assert_eq!(discovered.port, 8765);
+        assert_eq!(
+            discovered.session_uuid.as_deref(),
+            Some("11111111-2222-3333-4444-555555555555")
+        );
+    }
+
+    #[test]
+    fn to_discovered_marks_legacy_or_unknown_transport_as_incompatible() {
+        for entries in [
+            vec![("version", "1"), ("transport", "noise")],
+            vec![("version", PROTOCOL_VERSION)],
+            vec![("version", PROTOCOL_VERSION), ("transport", "http")],
+            vec![("transport", "noise")],
+        ] {
+            let discovered = to_discovered(record(txt(&entries))).unwrap();
+            assert!(!discovered.compatible, "{entries:?}");
+        }
+    }
+
+    #[test]
+    fn to_discovered_requires_txt_and_port() {
+        assert!(to_discovered(record(None)).is_none());
+        let mut no_port = record(txt(&[
+            ("version", PROTOCOL_VERSION),
+            ("transport", "noise"),
+        ]));
+        no_port.port = None;
+        assert!(to_discovered(no_port).is_none());
+    }
+
+    #[test]
+    fn teacher_discovered_serializes_compatible_flag_in_snake_case() {
+        let discovered = to_discovered(record(txt(&[
+            ("version", PROTOCOL_VERSION),
+            ("transport", "noise"),
+        ])))
+        .unwrap();
+        let value = serde_json::to_value(discovered).unwrap();
+        assert_eq!(value["compatible"], json!(true));
+        assert_eq!(value["session_uuid"], serde_json::Value::Null);
+    }
 }

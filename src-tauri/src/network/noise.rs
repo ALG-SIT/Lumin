@@ -280,11 +280,19 @@ async fn write_frame<S: AsyncWrite + Unpin>(stream: &mut S, data: &[u8]) -> Resu
 pub async fn serve(
     port: u16,
     state: Arc<ServerState>,
-    mut shutdown: watch::Receiver<bool>,
+    shutdown: watch::Receiver<bool>,
 ) -> Result<(tokio::task::JoinHandle<()>, String), String> {
     let listener = TcpListener::bind(SocketAddr::from(([0, 0, 0, 0], port)))
         .await
         .map_err(err)?;
+    serve_with_listener(listener, state, shutdown)
+}
+
+pub(crate) fn serve_with_listener(
+    listener: TcpListener,
+    state: Arc<ServerState>,
+    mut shutdown: watch::Receiver<bool>,
+) -> Result<(tokio::task::JoinHandle<()>, String), String> {
     let key = keypair()?;
     let print = fingerprint(&key.public);
     let context = PeerContext {
@@ -556,5 +564,681 @@ mod tests {
 
         let result = server_task.await.unwrap();
         assert!(result.is_err(), "Server should reject invalid handshake");
+    }
+
+    // ── Helpers ──────────────────────────────────────────────────────────────
+
+    use crate::network::auth::JoinCodeState;
+    use tokio::io::DuplexStream;
+
+    async fn connected_pair() -> (Connection<DuplexStream>, Connection<DuplexStream>) {
+        let client_keys = keypair().unwrap();
+        let server_keys = keypair().unwrap();
+        let (client_io, server_io) = tokio::io::duplex(4 * MAX_RECORD);
+        let (client, server) = tokio::join!(
+            Connection::handshake_client(client_io, &client_keys.private),
+            Connection::handshake_server(server_io, &server_keys.private),
+        );
+        (client.unwrap(), server.unwrap())
+    }
+
+    /// 暗号化済みの生レコードを送る(断片ヘッダを任意に組み立てるため)。
+    async fn send_raw_record(conn: &mut Connection<DuplexStream>, chunk: &[u8]) {
+        let mut out = vec![0u8; MAX_RECORD];
+        let n = conn.cipher.write_message(chunk, &mut out).unwrap();
+        write_frame(&mut conn.stream, &out[..n]).await.unwrap();
+    }
+
+    fn fragment(id: [u8; 16], count: u16, index: u16, body: &[u8]) -> Vec<u8> {
+        let mut chunk = Vec::with_capacity(20 + body.len());
+        chunk.extend_from_slice(&id);
+        chunk.extend_from_slice(&count.to_be_bytes());
+        chunk.extend_from_slice(&index.to_be_bytes());
+        chunk.extend_from_slice(body);
+        chunk
+    }
+
+    fn test_quiz() -> Quiz {
+        Quiz {
+            id: "quiz-1".into(),
+            title: "Test Quiz".into(),
+            subject: "math".into(),
+            topic: None,
+            questions: vec![],
+        }
+    }
+
+    fn test_state(active: Option<Uuid>, code: &str, quiz: Option<Quiz>) -> Arc<ServerState> {
+        Arc::new(ServerState {
+            session_id: active.map(|id| id.to_string()),
+            join_code: Arc::new(JoinCodeState::new(code.into())),
+            teacher_token: "teacher-token".into(),
+            active_session: tokio::sync::RwLock::new(active),
+            students: tokio::sync::RwLock::new(Vec::new()),
+            analysis_events: Arc::new(Mutex::new(Vec::new())),
+            quiz: tokio::sync::RwLock::new(quiz),
+            event_app: None,
+        })
+    }
+
+    struct TestServer {
+        port: u16,
+        fingerprint: String,
+        shutdown: watch::Sender<bool>,
+        handle: tokio::task::JoinHandle<()>,
+    }
+
+    async fn start_server(state: Arc<ServerState>) -> TestServer {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let (shutdown, shutdown_rx) = watch::channel(false);
+        let (handle, fingerprint) = serve_with_listener(listener, state, shutdown_rx).unwrap();
+        TestServer {
+            port,
+            fingerprint,
+            shutdown,
+            handle,
+        }
+    }
+
+    async fn connect(port: u16, key: &[u8]) -> Connection<TcpStream> {
+        let stream = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+        Connection::handshake_client(stream, key).await.unwrap()
+    }
+
+    async fn request(conn: &mut Connection<TcpStream>, req: &Request) -> Response {
+        conn.send(req).await.unwrap();
+        conn.receive().await.unwrap()
+    }
+
+    async fn join_token(conn: &mut Connection<TcpStream>, session_id: Uuid, code: &str) -> String {
+        match request(
+            conn,
+            &Request::Join {
+                session_id,
+                join_code: code.into(),
+            },
+        )
+        .await
+        {
+            Response::Joined {
+                participant_token, ..
+            } => participant_token,
+            other => panic!("Expected Joined, got {other:?}"),
+        }
+    }
+
+    fn event(session_id: Option<Uuid>, token: &str) -> AnalysisEvent {
+        AnalysisEvent {
+            id: Uuid::new_v4(),
+            participant_token: token.into(),
+            session_id,
+            question_id: "q1".into(),
+            concept: "linear-functions".into(),
+            misconception: None,
+            correct: true,
+            hint_count: 0,
+            retry_success: false,
+            submitted_at: chrono::Utc::now(),
+        }
+    }
+
+    fn error_message(response: Response) -> String {
+        match response {
+            Response::Error { message } => message,
+            other => panic!("Expected Error, got {other:?}"),
+        }
+    }
+
+    // ── Wire format / primitives ─────────────────────────────────────────────
+
+    #[test]
+    fn request_and_response_use_tagged_snake_case_wire_format() {
+        let session_id = Uuid::nil();
+        assert_eq!(
+            serde_json::to_value(Request::Ping).unwrap(),
+            serde_json::json!({"type": "ping"})
+        );
+        assert_eq!(
+            serde_json::to_value(Request::Prepare).unwrap(),
+            serde_json::json!({"type": "prepare"})
+        );
+        assert_eq!(
+            serde_json::to_value(Request::Join {
+                session_id,
+                join_code: "1234".into(),
+            })
+            .unwrap(),
+            serde_json::json!({
+                "type": "join",
+                "data": {"session_id": session_id, "join_code": "1234"}
+            })
+        );
+        assert_eq!(
+            serde_json::to_value(Response::Prepared { session_id }).unwrap(),
+            serde_json::json!({"type": "prepared", "data": {"session_id": session_id}})
+        );
+        assert_eq!(
+            serde_json::to_value(Response::Error {
+                message: "x".into()
+            })
+            .unwrap(),
+            serde_json::json!({"type": "error", "data": {"message": "x"}})
+        );
+        let parsed: Request = serde_json::from_value(serde_json::json!({"type": "ping"})).unwrap();
+        assert!(matches!(parsed, Request::Ping));
+        assert!(serde_json::from_value::<Request>(serde_json::json!({"type": "unknown"})).is_err());
+    }
+
+    #[test]
+    fn fingerprint_is_deterministic_and_key_specific() {
+        let a = keypair().unwrap();
+        let b = keypair().unwrap();
+        assert_eq!(fingerprint(&a.public), fingerprint(&a.public));
+        assert_ne!(fingerprint(&a.public), fingerprint(&b.public));
+        assert_eq!(a.public.len(), 32);
+        assert_eq!(a.private.len(), 32);
+    }
+
+    #[tokio::test]
+    async fn write_frame_rejects_empty_and_oversized_records() {
+        let (mut a, _b) = tokio::io::duplex(1024);
+        assert!(write_frame(&mut a, &[]).await.is_err());
+        let oversized = vec![0u8; MAX_RECORD + 1];
+        assert!(write_frame(&mut a, &oversized).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn read_frame_rejects_zero_and_too_long_lengths() {
+        let (mut a, mut b) = tokio::io::duplex(1024);
+        a.write_all(&[0, 0]).await.unwrap();
+        let mut buf = [0u8; 16];
+        assert!(read_frame(&mut b, &mut buf).await.is_err());
+
+        let (mut a, mut b) = tokio::io::duplex(1024);
+        a.write_all(&[0, 17]).await.unwrap();
+        a.write_all(&[0u8; 17]).await.unwrap();
+        assert!(read_frame(&mut b, &mut buf).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn read_frame_fails_on_truncated_stream() {
+        let (mut a, mut b) = tokio::io::duplex(1024);
+        a.write_all(&[0, 10, 1, 2, 3]).await.unwrap();
+        drop(a);
+        let mut buf = [0u8; 16];
+        assert!(read_frame(&mut b, &mut buf).await.is_err());
+    }
+
+    // ── Handshake ────────────────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn server_rejects_client_with_wrong_protocol_payload() {
+        let server_keys = keypair().unwrap();
+        let client_keys = keypair().unwrap();
+        let (mut client_io, server_io) = tokio::io::duplex(4 * MAX_RECORD);
+        let server = tokio::spawn(async move {
+            Connection::handshake_server(server_io, &server_keys.private).await
+        });
+
+        let mut noise = Builder::new(params().unwrap())
+            .local_private_key(&client_keys.private)
+            .unwrap()
+            .build_initiator()
+            .unwrap();
+        let mut out = vec![0u8; MAX_RECORD];
+        let n = noise.write_message(b"LUMIN\x01", &mut out).unwrap();
+        write_frame(&mut client_io, &out[..n]).await.unwrap();
+
+        let error = server.await.unwrap().err().expect("handshake must fail");
+        assert!(error.contains("非対応プロトコル"), "{error}");
+    }
+
+    #[tokio::test]
+    async fn client_rejects_server_with_wrong_protocol_payload() {
+        let server_keys = keypair().unwrap();
+        let client_keys = keypair().unwrap();
+        let (client_io, mut server_io) = tokio::io::duplex(4 * MAX_RECORD);
+        let client = tokio::spawn(async move {
+            Connection::handshake_client(client_io, &client_keys.private).await
+        });
+
+        let mut noise = Builder::new(params().unwrap())
+            .local_private_key(&server_keys.private)
+            .unwrap()
+            .build_responder()
+            .unwrap();
+        let mut input = vec![0u8; MAX_RECORD];
+        let mut out = vec![0u8; MAX_RECORD];
+        let n = read_frame(&mut server_io, &mut input).await.unwrap();
+        noise.read_message(&input[..n], &mut out).unwrap();
+        let n = noise.write_message(b"OTHER", &mut out).unwrap();
+        write_frame(&mut server_io, &out[..n]).await.unwrap();
+
+        let error = client.await.unwrap().err().expect("handshake must fail");
+        assert!(error.contains("アプリを更新してください"), "{error}");
+    }
+
+    #[tokio::test]
+    async fn handshake_fails_when_peer_disconnects() {
+        let server_keys = keypair().unwrap();
+        let (client_io, server_io) = tokio::io::duplex(1024);
+        drop(client_io);
+        assert!(
+            Connection::handshake_server(server_io, &server_keys.private)
+                .await
+                .is_err()
+        );
+    }
+
+    // ── Fragmentation ────────────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn send_rejects_payload_over_json_limit() {
+        let (mut client, _server) = connected_pair().await;
+        let huge = "A".repeat(MAX_JSON + 1);
+        let error = client.send(&huge).await.unwrap_err();
+        assert!(error.contains("上限"), "{error}");
+    }
+
+    #[tokio::test]
+    async fn receive_reassembles_out_of_order_fragments() {
+        let (mut client, mut server) = connected_pair().await;
+        let id = [7u8; 16];
+        send_raw_record(&mut client, &fragment(id, 2, 1, b"\"there\"]")).await;
+        send_raw_record(&mut client, &fragment(id, 2, 0, b"[\"hello\",")).await;
+        let value: Vec<String> = server.receive().await.unwrap();
+        assert_eq!(value, ["hello", "there"]);
+    }
+
+    #[tokio::test]
+    async fn receive_rejects_short_record() {
+        let (mut client, mut server) = connected_pair().await;
+        send_raw_record(&mut client, &[0u8; 19]).await;
+        let error = server.receive::<serde_json::Value>().await.unwrap_err();
+        assert!(error.contains("形式が不正"), "{error}");
+    }
+
+    #[tokio::test]
+    async fn receive_rejects_invalid_fragment_headers() {
+        for (count, index) in [(0u16, 0u16), (2, 2), (19, 0)] {
+            let (mut client, mut server) = connected_pair().await;
+            send_raw_record(&mut client, &fragment([1u8; 16], count, index, b"{}")).await;
+            let error = server.receive::<serde_json::Value>().await.unwrap_err();
+            assert!(
+                error.contains("順序が不正"),
+                "count={count} index={index}: {error}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn receive_rejects_fragments_from_different_messages() {
+        let (mut client, mut server) = connected_pair().await;
+        send_raw_record(&mut client, &fragment([1u8; 16], 2, 0, b"[1,")).await;
+        send_raw_record(&mut client, &fragment([2u8; 16], 2, 1, b"2]")).await;
+        let error = server.receive::<serde_json::Value>().await.unwrap_err();
+        assert!(error.contains("順序が不正"), "{error}");
+    }
+
+    #[tokio::test]
+    async fn receive_rejects_duplicate_fragment_and_count_change() {
+        let (mut client, mut server) = connected_pair().await;
+        send_raw_record(&mut client, &fragment([1u8; 16], 2, 0, b"[1,")).await;
+        send_raw_record(&mut client, &fragment([1u8; 16], 2, 0, b"[1,")).await;
+        let error = server.receive::<serde_json::Value>().await.unwrap_err();
+        assert!(error.contains("重複"), "{error}");
+
+        let (mut client, mut server) = connected_pair().await;
+        send_raw_record(&mut client, &fragment([1u8; 16], 3, 0, b"[1,")).await;
+        send_raw_record(&mut client, &fragment([1u8; 16], 2, 1, b"2]")).await;
+        let error = server.receive::<serde_json::Value>().await.unwrap_err();
+        assert!(error.contains("重複"), "{error}");
+    }
+
+    #[tokio::test]
+    async fn receive_rejects_reassembled_payload_over_json_limit() {
+        let (mut client, mut server) = connected_pair().await;
+        let body = vec![b' '; FRAGMENT_SIZE];
+        let writer = async move {
+            for index in 0..18u16 {
+                let mut out = vec![0u8; MAX_RECORD];
+                let chunk = fragment([9u8; 16], 18, index, &body);
+                let n = client.cipher.write_message(&chunk, &mut out).unwrap();
+                if write_frame(&mut client.stream, &out[..n]).await.is_err() {
+                    break;
+                }
+            }
+            client
+        };
+        let (_client, result) = tokio::join!(writer, server.receive::<serde_json::Value>());
+        let error = result.unwrap_err();
+        assert!(error.contains("上限"), "{error}");
+    }
+
+    #[tokio::test]
+    async fn receive_rejects_tampered_ciphertext() {
+        let (mut client, mut server) = connected_pair().await;
+        let mut out = vec![0u8; MAX_RECORD];
+        let n = client
+            .cipher
+            .write_message(&fragment([1u8; 16], 1, 0, b"{}"), &mut out)
+            .unwrap();
+        out[n / 2] ^= 0xff;
+        write_frame(&mut client.stream, &out[..n]).await.unwrap();
+        assert!(server.receive::<serde_json::Value>().await.is_err());
+    }
+
+    // ── serve(): classroom request handling ─────────────────────────────────
+
+    #[tokio::test]
+    async fn serve_answers_ping_and_exposes_teacher_fingerprint() {
+        let session_id = Uuid::new_v4();
+        let server = start_server(test_state(Some(session_id), "1234", Some(test_quiz()))).await;
+        let key = keypair().unwrap();
+        let mut conn = connect(server.port, &key.private).await;
+        assert_eq!(fingerprint(&conn.remote_static), server.fingerprint);
+        assert!(matches!(
+            request(&mut conn, &Request::Ping).await,
+            Response::Pong
+        ));
+        assert!(matches!(
+            request(&mut conn, &Request::Ping).await,
+            Response::Pong
+        ));
+        let _ = server.shutdown.send(true);
+        server.handle.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn serve_closes_connection_when_preparing_without_active_session() {
+        let server = start_server(test_state(None, "1234", Some(test_quiz()))).await;
+        let key = keypair().unwrap();
+        let mut conn = connect(server.port, &key.private).await;
+        conn.send(&Request::Prepare).await.unwrap();
+        assert!(conn.receive::<Response>().await.is_err());
+        let _ = server.shutdown.send(true);
+    }
+
+    #[tokio::test]
+    async fn serve_returns_error_and_closes_when_quiz_is_missing() {
+        let session_id = Uuid::new_v4();
+        let state = test_state(Some(session_id), "1234", None);
+        let server = start_server(state.clone()).await;
+        let key = keypair().unwrap();
+        let mut conn = connect(server.port, &key.private).await;
+        let response = request(
+            &mut conn,
+            &Request::Join {
+                session_id,
+                join_code: "1234".into(),
+            },
+        )
+        .await;
+        assert!(error_message(response).contains("クイズが配信されていません"));
+        assert!(state.students.read().await.is_empty());
+        // Error 応答後はサーバーが接続を閉じる
+        conn.send(&Request::Ping).await.ok();
+        assert!(conn.receive::<Response>().await.is_err());
+        let _ = server.shutdown.send(true);
+    }
+
+    #[tokio::test]
+    async fn serve_rejects_join_for_wrong_session_even_with_correct_code() {
+        let session_id = Uuid::new_v4();
+        let state = test_state(Some(session_id), "1234", Some(test_quiz()));
+        let server = start_server(state.clone()).await;
+        let key = keypair().unwrap();
+        let mut conn = connect(server.port, &key.private).await;
+        let response = request(
+            &mut conn,
+            &Request::Join {
+                session_id: Uuid::new_v4(),
+                join_code: "1234".into(),
+            },
+        )
+        .await;
+        assert!(error_message(response).contains("参加コードまたは授業情報が正しくありません"));
+        assert!(state.students.read().await.is_empty());
+        let _ = server.shutdown.send(true);
+    }
+
+    #[tokio::test]
+    async fn serve_reuses_token_for_same_student_key_and_issues_new_for_others() {
+        let session_id = Uuid::new_v4();
+        let state = test_state(Some(session_id), "1234", Some(test_quiz()));
+        let server = start_server(state.clone()).await;
+        let alice = keypair().unwrap();
+        let bob = keypair().unwrap();
+
+        let mut conn = connect(server.port, &alice.private).await;
+        let first = join_token(&mut conn, session_id, "1234").await;
+        drop(conn);
+        let mut conn = connect(server.port, &alice.private).await;
+        let again = join_token(&mut conn, session_id, "1234").await;
+        assert_eq!(first, again);
+
+        let mut conn = connect(server.port, &bob.private).await;
+        let other = join_token(&mut conn, session_id, "1234").await;
+        assert_ne!(first, other);
+
+        let roster = state.students.read().await;
+        assert_eq!(roster.len(), 2);
+        assert!(roster.iter().any(|s| s.participant_token == first));
+        assert!(roster.iter().any(|s| s.participant_token == other));
+        drop(roster);
+        let _ = server.shutdown.send(true);
+    }
+
+    #[tokio::test]
+    async fn serve_blocks_join_after_repeated_failures_from_same_ip() {
+        let session_id = Uuid::new_v4();
+        let state = test_state(Some(session_id), "1234", Some(test_quiz()));
+        let server = start_server(state.clone()).await;
+        let key = keypair().unwrap();
+
+        for _ in 0..20 {
+            // 同じ IP の別の鍵にも制限が適用されることを検証する。
+            let key = keypair().unwrap();
+            let mut conn = connect(server.port, &key.private).await;
+            let response = request(
+                &mut conn,
+                &Request::Join {
+                    session_id,
+                    join_code: "0000".into(),
+                },
+            )
+            .await;
+            assert!(error_message(response).contains("正しくありません"));
+        }
+
+        // 正しいコードでもブロック中は拒否される
+        let mut conn = connect(server.port, &key.private).await;
+        let response = request(
+            &mut conn,
+            &Request::Join {
+                session_id,
+                join_code: "1234".into(),
+            },
+        )
+        .await;
+        assert!(error_message(response).contains("参加試行が多すぎます"));
+        assert!(state.students.read().await.is_empty());
+        let _ = server.shutdown.send(true);
+    }
+
+    #[tokio::test]
+    async fn serve_successful_join_resets_failure_counter() {
+        let session_id = Uuid::new_v4();
+        let server = start_server(test_state(Some(session_id), "1234", Some(test_quiz()))).await;
+        let key = keypair().unwrap();
+        let wrong = Request::Join {
+            session_id,
+            join_code: "0000".into(),
+        };
+
+        for _ in 0..19 {
+            let mut conn = connect(server.port, &key.private).await;
+            assert!(matches!(
+                request(&mut conn, &wrong).await,
+                Response::Error { .. }
+            ));
+        }
+        let mut conn = connect(server.port, &key.private).await;
+        join_token(&mut conn, session_id, "1234").await;
+
+        // 成功でカウンタがリセットされるため、さらに 19 回失敗してもブロックされない
+        for _ in 0..19 {
+            let mut conn = connect(server.port, &key.private).await;
+            let message = error_message(request(&mut conn, &wrong).await);
+            assert!(!message.contains("多すぎます"), "{message}");
+        }
+        let mut conn = connect(server.port, &key.private).await;
+        join_token(&mut conn, session_id, "1234").await;
+        let _ = server.shutdown.send(true);
+    }
+
+    #[tokio::test]
+    async fn serve_rejects_analysis_before_join() {
+        let session_id = Uuid::new_v4();
+        let state = test_state(Some(session_id), "1234", Some(test_quiz()));
+        let server = start_server(state.clone()).await;
+        let key = keypair().unwrap();
+        let mut conn = connect(server.port, &key.private).await;
+        let response = request(
+            &mut conn,
+            &Request::Analysis(event(Some(session_id), "forged-token")),
+        )
+        .await;
+        assert!(error_message(response).contains("参加者または授業を確認できません"));
+        assert!(state.analysis_events.lock().await.is_empty());
+        let _ = server.shutdown.send(true);
+    }
+
+    #[tokio::test]
+    async fn serve_rejects_analysis_impersonating_another_student() {
+        let session_id = Uuid::new_v4();
+        let state = test_state(Some(session_id), "1234", Some(test_quiz()));
+        let server = start_server(state.clone()).await;
+        let alice = keypair().unwrap();
+        let mallory = keypair().unwrap();
+
+        let mut alice_conn = connect(server.port, &alice.private).await;
+        let alice_token = join_token(&mut alice_conn, session_id, "1234").await;
+        let mut mallory_conn = connect(server.port, &mallory.private).await;
+        join_token(&mut mallory_conn, session_id, "1234").await;
+
+        let response = request(
+            &mut mallory_conn,
+            &Request::Analysis(event(Some(session_id), &alice_token)),
+        )
+        .await;
+        assert!(matches!(response, Response::Error { .. }));
+        assert!(state.analysis_events.lock().await.is_empty());
+        let _ = server.shutdown.send(true);
+    }
+
+    #[tokio::test]
+    async fn serve_rejects_analysis_for_wrong_or_ended_session_and_kicked_student() {
+        let session_id = Uuid::new_v4();
+        let state = test_state(Some(session_id), "1234", Some(test_quiz()));
+        let server = start_server(state.clone()).await;
+        let key = keypair().unwrap();
+
+        // 別セッション宛て
+        let mut conn = connect(server.port, &key.private).await;
+        let token = join_token(&mut conn, session_id, "1234").await;
+        let response = request(
+            &mut conn,
+            &Request::Analysis(event(Some(Uuid::new_v4()), &token)),
+        )
+        .await;
+        assert!(matches!(response, Response::Error { .. }));
+
+        // キックされた生徒
+        let mut conn = connect(server.port, &key.private).await;
+        let token = join_token(&mut conn, session_id, "1234").await;
+        state
+            .students
+            .write()
+            .await
+            .retain(|s| s.participant_token != token);
+        let response = request(
+            &mut conn,
+            &Request::Analysis(event(Some(session_id), &token)),
+        )
+        .await;
+        assert!(matches!(response, Response::Error { .. }));
+
+        // 授業終了後
+        let mut conn = connect(server.port, &key.private).await;
+        let token = join_token(&mut conn, session_id, "1234").await;
+        *state.active_session.write().await = None;
+        let response = request(
+            &mut conn,
+            &Request::Analysis(event(Some(session_id), &token)),
+        )
+        .await;
+        assert!(matches!(response, Response::Error { .. }));
+
+        assert!(state.analysis_events.lock().await.is_empty());
+        let _ = server.shutdown.send(true);
+    }
+
+    #[tokio::test]
+    async fn serve_acks_and_deduplicates_analysis_events() {
+        let session_id = Uuid::new_v4();
+        let state = test_state(Some(session_id), "1234", Some(test_quiz()));
+        let server = start_server(state.clone()).await;
+        let key = keypair().unwrap();
+        let mut conn = connect(server.port, &key.private).await;
+        let token = join_token(&mut conn, session_id, "1234").await;
+
+        let submitted = event(Some(session_id), &token);
+        for _ in 0..2 {
+            match request(&mut conn, &Request::Analysis(submitted.clone())).await {
+                Response::Ack(ack) => assert_eq!(ack.event_id, submitted.id),
+                other => panic!("Expected Ack, got {other:?}"),
+            }
+        }
+        let second = event(Some(session_id), &token);
+        assert!(matches!(
+            request(&mut conn, &Request::Analysis(second.clone())).await,
+            Response::Ack(_)
+        ));
+
+        let events = state.analysis_events.lock().await;
+        assert_eq!(
+            events.iter().map(|e| e.id).collect::<Vec<_>>(),
+            [submitted.id, second.id]
+        );
+        assert!(events.iter().all(|e| e.session_id == Some(session_id)));
+        assert!(events.iter().all(|e| e.participant_token == token));
+        drop(events);
+        let _ = server.shutdown.send(true);
+    }
+
+    #[tokio::test]
+    async fn serve_shutdown_closes_open_connections_and_stops_listening() {
+        let session_id = Uuid::new_v4();
+        let server = start_server(test_state(Some(session_id), "1234", Some(test_quiz()))).await;
+        let key = keypair().unwrap();
+        let mut conn = connect(server.port, &key.private).await;
+        assert!(matches!(
+            request(&mut conn, &Request::Ping).await,
+            Response::Pong
+        ));
+
+        server.shutdown.send(true).unwrap();
+        server.handle.await.unwrap();
+
+        assert!(conn.receive::<Response>().await.is_err());
+        let reconnect = tokio::time::timeout(
+            Duration::from_secs(2),
+            TcpStream::connect(("127.0.0.1", server.port)),
+        )
+        .await
+        .expect("checking the closed listener should not time out");
+        assert!(reconnect.is_err(), "listener should be closed");
     }
 }
